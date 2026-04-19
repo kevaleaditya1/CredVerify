@@ -2,17 +2,18 @@ import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useWeb3 } from '../contexts/Web3Context';
 
+import { config } from '../config';
+
 const Header: React.FC = () => {
-  const { account, isConnected, connectWallet, disconnectWallet, chainId, switchToHolesky } = useWeb3();
+  const { account, isConnected, connectWallet, disconnectWallet, chainId, switchNetwork } = useWeb3();
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const HOLESKY_CHAIN_ID = 17000;
 
   const formatAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
-  const isWrongNetwork = chainId && chainId !== HOLESKY_CHAIN_ID;
+  const isWrongNetwork = chainId && chainId !== config.chainId;
 
   const navItems = [
     { path: '/', label: 'Home', icon: '🏠' },
@@ -84,7 +85,7 @@ const Header: React.FC = () => {
             <div className="hidden lg:flex items-center space-x-3 xl:space-x-4">
               {isWrongNetwork && (
                 <button
-                  onClick={switchToHolesky}
+                  onClick={switchNetwork}
                   className="btn bg-warning-500 text-white hover:bg-warning-600 text-xs xl:text-sm px-3 py-2"
                 >
                   <span className="hidden xl:inline">⚠️ </span>Switch Network
@@ -176,13 +177,13 @@ const Header: React.FC = () => {
               {isWrongNetwork && (
                 <button
                   onClick={() => {
-                    switchToHolesky();
+                    switchNetwork();
                     closeMobileMenu();
                   }}
                   className="w-full flex items-center justify-center space-x-2 p-4 bg-warning-500 text-white rounded-xl font-semibold active:scale-95 transition-transform"
                 >
                   <span>⚠️</span>
-                  <span>Switch to Holesky Network</span>
+                  <span>Switch Network</span>
                 </button>
               )}
               
@@ -193,7 +194,9 @@ const Header: React.FC = () => {
                       <div className="w-3 h-3 bg-success-500 rounded-full animate-pulse"></div>
                       <div>
                         <span className="text-sm font-semibold text-success-800">Connected</span>
-                        <div className="text-xs text-success-600">Holesky Testnet</div>
+                        <div className="text-xs text-success-600">
+                          {Object.values(config.networks).find(n => n.chainId === config.chainId)?.name || 'Correct Network'}
+                        </div>
                       </div>
                     </div>
                     <span className="text-sm text-success-700 font-mono bg-success-100 px-2 py-1 rounded">

@@ -14,13 +14,16 @@ const config: HardhatUserConfig = {
     },
   },
   networks: {
+    hardhat: {
+      chainId: 31338,
+    },
     sepolia: {
       url: process.env.SEPOLIA_RPC_URL || "https://sepolia.infura.io/v3/YOUR_INFURA_KEY",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       gasPrice: 20000000000, // 20 gwei
     },
     holesky: {
-      url: "https://ethereum-holesky.publicnode.com",
+      url: process.env.HOLESKY_RPC_URL || "https://ethereum-holesky.publicnode.com",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       gasPrice: 10000000000, // 10 gwei (usually cheaper)
       chainId: 17000,
@@ -35,6 +38,7 @@ const config: HardhatUserConfig = {
     },
     localhost: {
       url: "http://127.0.0.1:8545",
+      chainId: 31338,
     },
   },
   etherscan: {

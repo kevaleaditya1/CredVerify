@@ -8,9 +8,8 @@ async function main() {
   // IMPORTANT: Replace this with your actual deployed contract address
   const contractAddress = process.env.CONTRACT_ADDRESS || "0x3753cfB00dd01D35A36284A909EcBb73a06Fcc7b";
   
-  if (contractAddress === "0x3753cfB00dd01D35A36284A909EcBb73a06Fcc7b") {
-    console.error("❌ Please set CONTRACT_ADDRESS environment variable or update the script with your deployed contract address");
-    console.log("Usage: CONTRACT_ADDRESS=0x... npx hardhat run scripts/add-issuer.js --network holesky");
+  if (!contractAddress) {
+    console.error("❌ Please set CONTRACT_ADDRESS environment variable");
     process.exit(1);
   }
   
@@ -21,9 +20,9 @@ async function main() {
   const dacvRegistry = DACVRegistry.attach(contractAddress);
 
   // University details
-  const universityAddress = deployer.address; // Use deployer as university for testing
-  const universityName = "Test University";
-  const universityCountry = "Test Country";
+  const universityAddress = "0x8626f6940E2eb28930eFb4CeF49B2d1F2C9C1199"; // User defined address
+  const universityName = "AGPIT";
+  const universityCountry = "India";
 
   console.log("Adding university issuer...");
   console.log("University Address:", universityAddress);

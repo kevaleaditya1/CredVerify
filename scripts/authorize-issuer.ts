@@ -6,9 +6,7 @@ async function main() {
     const issuerName = "University of Holesky";
     const issuerCountry = "Global";
 
-    // Using a public Infura key for testing if needed, or a reliable public RPC
-    // Trying a different reliable RPC
-    const rpcUrl = "https://rpc.ankr.com/eth_holesky";
+    const rpcUrl = process.env.HOLESKY_RPC_URL || "https://ethereum-holesky.publicnode.com";
 
     console.log(`Preparing to authorize ${newIssuerAddress} on contract ${contractAddress}...`);
 

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { ethers, BrowserProvider, Contract } from 'ethers';
 import toast from 'react-hot-toast';
+import { config } from '../config';
 
 // Contract ABI (simplified - you'll need to import the full ABI from your compiled contract)
 const CONTRACT_ABI = [
@@ -25,7 +26,7 @@ interface Web3ContextType {
   isConnected: boolean;
   connectWallet: () => Promise<void>;
   disconnectWallet: () => void;
-  switchToHolesky: () => Promise<void>;
+  switchNetwork: () => Promise<void>;
 }
 
 const Web3Context = createContext<Web3ContextType | null>(null);
@@ -43,7 +44,6 @@ interface Web3ProviderProps {
 }
 
 const CONTRACT_ADDRESS = process.env.REACT_APP_CONTRACT_ADDRESS || '';
-const HOLESKY_CHAIN_ID = 17000;
 
 export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
   const [provider, setProvider] = useState<BrowserProvider | null>(null);
@@ -94,39 +94,54 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
     toast.success('Wallet disconnected');
   };
 
-  const switchToHolesky = async () => {
+  const switchNetwork = async () => {
     try {
       if (!window.ethereum) return;
-
+      
+      // Find the currently configured network from config
+      const targetNetworkKey = Object.keys(config.networks).find(
+        key => config.networks[key as keyof typeof config.networks].chainId === config.chainId
+      ) as keyof typeof config.networks;
+      
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
-        params: [{ chainId: `0x${HOLESKY_CHAIN_ID.toString(16)}` }],
+        params: [{ chainId: `0x${config.chainId.toString(16)}` }],
       });
     } catch (error: any) {
       if (error.code === 4902) {
         // Chain not added to MetaMask
+        const targetNetKey = Object.keys(config.networks).find(
+          key => config.networks[key as keyof typeof config.networks].chainId === config.chainId
+        ) as keyof typeof config.networks;
+        const fallbackActiveNetwork = targetNetKey ? config.networks[targetNetKey] : config.networks.holesky;
+        
         try {
+          const addParams: any = {
+            chainId: `0x${config.chainId.toString(16)}`,
+            chainName: fallbackActiveNetwork.name,
+            nativeCurrency: {
+              name: 'ETH',
+              symbol: 'ETH',
+              decimals: 18,
+            },
+            rpcUrls: fallbackActiveNetwork.rpcUrls,
+          };
+          
+          if (fallbackActiveNetwork.blockExplorer) {
+            addParams.blockExplorerUrls = [fallbackActiveNetwork.blockExplorer];
+          }
+
           await window.ethereum.request({
             method: 'wallet_addEthereumChain',
-            params: [
-              {
-                chainId: `0x${HOLESKY_CHAIN_ID.toString(16)}`,
-                chainName: 'Holesky Testnet',
-                nativeCurrency: {
-                  name: 'Holesky ETH',
-                  symbol: 'ETH',
-                  decimals: 18,
-                },
-                rpcUrls: ['https://ethereum-holesky.publicnode.com'],
-                blockExplorerUrls: ['https://holesky.etherscan.io/'],
-              },
-            ],
+            params: [addParams],
           });
-        } catch (addError) {
-          toast.error('Failed to add Holesky network');
+        } catch (addError: any) {
+          console.error("MetaMask Add Error:", addError);
+          toast.error(addError?.message || `Failed to add ${fallbackActiveNetwork.name}`);
         }
       } else {
-        toast.error('Failed to switch to Holesky network');
+        console.error("MetaMask Switch Error:", error);
+        toast.error(error?.message || 'Failed to switch network');
       }
     }
   };
@@ -184,7 +199,7 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
     isConnected,
     connectWallet,
     disconnectWallet,
-    switchToHolesky,
+    switchNetwork,
   };
 
   return <Web3Context.Provider value={value}>{children}</Web3Context.Provider>;

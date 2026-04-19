@@ -6,8 +6,7 @@ async function main() {
     try {
         const contractAddress = "0x3753cfB00dd01D35A36284A909EcBb73a06Fcc7b";
         const userAddress = "0x19d6f54282377c031e2f19d2e4699c1541de760e";
-        // Try a different RPC URL
-        const rpcUrl = "https://rpc.holesky.ethpandaops.io";
+        const rpcUrl = process.env.HOLESKY_RPC_URL || "https://ethereum-holesky.publicnode.com";
 
         console.log("Reading artifact...");
         const artifact = await artifacts.readArtifact("DACVRegistry");

@@ -1,9 +1,19 @@
 node_modules
+#envs
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+
+#netlify envs
+netlify.toml
+netlify.env
+
+#docs
+SETUP.md
+NETLIFY_DEPLOY.md
+IPFS_IMPLEMENTATION.md
 
 # Hardhat files
 cache
