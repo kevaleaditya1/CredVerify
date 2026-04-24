@@ -1,187 +1,138 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useWeb3 } from '../contexts/Web3Context';
+import { ShieldCheck, Zap, Globe, Lock, GraduationCap, UserCircle, Search, ArrowRight } from 'lucide-react';
+import { cn } from '../lib/utils';
 
 const Home: React.FC = () => {
   const { isConnected } = useWeb3();
 
   const features = [
     {
-      title: 'Tamper-Proof Credentials',
-      description: 'Academic credentials stored on blockchain cannot be forged or altered',
-      icon: '🔒',
+      title: 'Tamper-Proof',
+      description: 'Immutable records stored on the Ethereum blockchain ensure zero forgery.',
+      icon: <ShieldCheck className="w-6 h-6" />,
     },
     {
-      title: 'Instant Verification',
-      description: 'Verify credentials in seconds using blockchain technology',
-      icon: '⚡',
+      title: 'Instant Scan',
+      description: 'Verify credentials in milliseconds with our direct ledger protocol.',
+      icon: <Zap className="w-6 h-6" />,
     },
     {
-      title: 'Global Accessibility',
-      description: 'Access and verify credentials from anywhere in the world',
-      icon: '🌍',
+      title: 'Global Access',
+      description: 'Universal standard for academic records accessible worldwide.',
+      icon: <Globe className="w-6 h-6" />,
     },
     {
-      title: 'Privacy Protected',
-      description: 'Only credential hashes stored on-chain, documents on IPFS',
-      icon: '🛡️',
+      title: 'Private Sync',
+      description: 'Encrypted hashes maintain confidentiality and complete data safety.',
+      icon: <Lock className="w-6 h-6" />,
     },
   ];
 
   const userTypes = [
     {
-      title: 'Universities',
-      description: 'Issue tamper-proof digital credentials to students',
+      title: 'Institutions',
+      description: 'Authorized portal to issue secure academic certificates.',
       link: '/university',
-      icon: '🎓',
-      color: 'bg-blue-500',
+      icon: <GraduationCap className="w-10 h-10" />,
     },
     {
       title: 'Students',
-      description: 'View and share your verified academic credentials',
+      description: 'A sovereign vault for your digital credentials.',
       link: '/student',
-      icon: '👨‍🎓',
-      color: 'bg-green-500',
+      icon: <UserCircle className="w-10 h-10" />,
     },
     {
-      title: 'Verify',
-      description: 'Instantly verify candidate credentials',
-      link: '/employer',
-      icon: '💼',
-      color: 'bg-purple-500',
+      title: 'Verification',
+      description: 'Public audit terminal for instant record validation.',
+      link: '/verify',
+      icon: <Search className="w-10 h-10" />,
     },
   ];
 
   return (
-    <div className="space-y-16">
-      {/* Hero Section */}
-      <section className="text-center py-12">
-        <h1 className="text-5xl font-bold text-gray-900 mb-6">
-          Decentralized Academic
-          <span className="text-primary-600"> Credential Verification</span>
-        </h1>
-        <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-8">
-          Secure, transparent, and instant verification of academic credentials using blockchain technology.
-          Issue, store, and verify educational certificates with complete trust and transparency.
-        </p>
-        
-        {!isConnected && (
-          <div className="bg-warning-50 border border-warning-200 rounded-lg p-4 max-w-md mx-auto mb-8">
-            <p className="text-warning-800 text-sm">
-              👆 Connect your wallet to get started with DACV
+    <div className="space-y-32 pb-32">
+      {/* Hero */}
+      <section className="flex flex-col lg:flex-row items-center gap-16 py-12">
+        <div className="flex-1 space-y-10">
+          <div className="space-y-6">
+            <h1 className="text-6xl lg:text-8xl font-bold tracking-tight leading-[0.9]">
+              Decentralized <br />
+              <span className="text-muted-foreground text-4xl lg:text-6xl font-medium tracking-normal">Academic Records.</span>
+            </h1>
+            <p className="max-w-xl text-xl text-muted-foreground leading-relaxed">
+              CredVerify provides a sovereign infrastructure for educational achievements. 
+              Trustless, permanent, and instantly verifiable.
             </p>
           </div>
-        )}
-      </section>
-
-      {/* Features Section */}
-      <section className="py-12">
-        <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">
-          Why Choose DACV?
-        </h2>
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-          {features.map((feature, index) => (
-            <div key={index} className="card text-center hover:shadow-lg transition-shadow">
-              <div className="text-4xl mb-4">{feature.icon}</div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                {feature.title}
-              </h3>
-              <p className="text-gray-600 text-sm">
-                {feature.description}
-              </p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* User Types Section */}
-      <section className="py-12">
-        <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">
-          Choose Your Role
-        </h2>
-        <div className="grid md:grid-cols-3 gap-8">
-          {userTypes.map((userType, index) => (
-            <Link
-              key={index}
-              to={userType.link}
-              className="card hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group"
-            >
-              <div className={`w-16 h-16 ${userType.color} rounded-lg flex items-center justify-center text-2xl mb-4 group-hover:scale-110 transition-transform`}>
-                {userType.icon}
-              </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                {userType.title}
-              </h3>
-              <p className="text-gray-600 mb-4">
-                {userType.description}
-              </p>
-              <div className="flex items-center text-primary-600 font-medium">
-                Get Started 
-                <span className="ml-1 group-hover:translate-x-1 transition-transform">→</span>
-              </div>
+          
+          <div className="flex flex-wrap gap-4">
+            <Link to="/verify" className="matte-button-primary h-14 px-10 text-lg rounded-full">
+              Audit a Record
             </Link>
+            <Link to="/university" className="matte-button-secondary h-14 px-10 text-lg rounded-full bg-zinc-900 border-zinc-800 hover:bg-zinc-800">
+              Registrar Portal
+            </Link>
+          </div>
+        </div>
+
+        <div className="flex-1 w-full max-w-xl">
+           <div className="aspect-square rounded-3xl bg-zinc-900 border border-zinc-800 flex items-center justify-center relative overflow-hidden group">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.05),transparent)] opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="text-zinc-700 font-black text-[12vw] select-none tracking-tighter -rotate-12">DACV</div>
+           </div>
+        </div>
+      </section>
+
+      {/* Grid of Users */}
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {userTypes.map((type, i) => (
+          <Link 
+            key={i} 
+            to={type.link} 
+            className="matte-card p-10 space-y-12 hover:border-white/20 transition-all group"
+          >
+            <div className="text-muted-foreground group-hover:text-foreground transition-colors">{type.icon}</div>
+            <div className="space-y-3">
+              <h3 className="text-2xl font-bold">{type.title}</h3>
+              <p className="text-muted-foreground">{type.description}</p>
+            </div>
+            <div className="flex items-center text-sm font-bold tracking-tighter opacity-0 group-hover:opacity-100 transition-opacity">
+              ENTER MODULE <ArrowRight className="ml-2 w-4 h-4" />
+            </div>
+          </Link>
+        ))}
+      </section>
+
+      {/* Features Detail */}
+      <section className="py-20 border-y border-zinc-900">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12">
+          {features.map((feature, i) => (
+            <div key={i} className="space-y-6">
+              <div className="w-12 h-12 rounded-xl bg-zinc-900 flex items-center justify-center border border-zinc-800">
+                {feature.icon}
+              </div>
+              <div className="space-y-2">
+                <h4 className="text-lg font-bold">{feature.title}</h4>
+                <p className="text-sm text-muted-foreground leading-relaxed">{feature.description}</p>
+              </div>
+            </div>
           ))}
         </div>
       </section>
 
-      {/* How It Works Section */}
-      <section className="py-12 bg-gray-50 -mx-4 px-4 rounded-lg">
-        <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">
-          How It Works
-        </h2>
-        <div className="grid md:grid-cols-3 gap-8">
-          <div className="text-center">
-            <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center text-primary-600 text-2xl font-bold mx-auto mb-4">
-              1
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Issue Credential
-            </h3>
-            <p className="text-gray-600">
-              Universities upload credentials to IPFS and store the hash on blockchain
-            </p>
-          </div>
-          <div className="text-center">
-            <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center text-primary-600 text-2xl font-bold mx-auto mb-4">
-              2
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Store Securely
-            </h3>
-            <p className="text-gray-600">
-              Credentials are tamper-proof and permanently stored on the blockchain
-            </p>
-          </div>
-          <div className="text-center">
-            <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center text-primary-600 text-2xl font-bold mx-auto mb-4">
-              3
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Verify Instantly
-            </h3>
-            <p className="text-gray-600">
-              Anyone can verify credential authenticity in seconds using the blockchain
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* Stats Section */}
-      <section className="py-12 text-center">
-        <div className="grid md:grid-cols-3 gap-8">
-          <div>
-            <div className="text-3xl font-bold text-primary-600 mb-2">100%</div>
-            <div className="text-gray-600">Tamper-Proof</div>
-          </div>
-          <div>
-            <div className="text-3xl font-bold text-primary-600 mb-2">&lt;5s</div>
-            <div className="text-gray-600">Verification Time</div>
-          </div>
-          <div>
-            <div className="text-3xl font-bold text-primary-600 mb-2">24/7</div>
-            <div className="text-gray-600">Global Access</div>
-          </div>
-        </div>
+      {/* CTA Bottom */}
+      <section className="bg-white text-black p-16 lg:p-24 rounded-[3rem] text-center space-y-10 overflow-hidden relative">
+         <div className="absolute top-0 right-0 w-64 h-64 bg-black/5 rounded-full blur-3xl" />
+         <h2 className="text-4xl lg:text-6xl font-bold tracking-tighter max-w-3xl mx-auto">
+            Ready to integrate with the global credential layer?
+         </h2>
+         <div className="flex justify-center gap-6">
+           <Link to="/university" className="bg-black text-white px-10 py-5 rounded-full font-bold hover:scale-105 transition-transform">
+             Get started
+           </Link>
+         </div>
       </section>
     </div>
   );

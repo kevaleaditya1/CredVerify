@@ -3,6 +3,25 @@ import { useDropzone } from 'react-dropzone';
 import toast from 'react-hot-toast';
 import { useWeb3 } from '../contexts/Web3Context';
 import QRCode from 'qrcode.react';
+import { 
+  Upload, 
+  FileText, 
+  Award, 
+  Trash2, 
+  Share2, 
+  Eye, 
+  CheckCircle2, 
+  Globe, 
+  AlertCircle,
+  Clock,
+  ExternalLink,
+  ChevronRight,
+  ShieldCheck,
+  Building2,
+  Database,
+  X
+} from 'lucide-react';
+import { cn } from '../lib/utils';
 
 // Import real IPFS and verification utilities
 import {
@@ -14,10 +33,7 @@ import {
   getIPFSUrl,
   type CredentialMetadata
 } from '../utils/ipfs';
-// Import verification utilities
 import { generateVerificationUrl } from '../utils/verification';
-// Other utility functions available if needed
-// import { formatCredentialId } from '../utils/verification';
 
 interface IssuedCredential {
   id: string;
@@ -26,8 +42,8 @@ interface IssuedCredential {
   issueDate: string;
   ipfsHash: string;
   verificationUrl: string;
-  fileCID?: string; // For viewing the actual document
-  metadataCID?: string; // For credential metadata
+  fileCID?: string;
+  metadataCID?: string;
 }
 
 const University: React.FC = () => {
@@ -39,7 +55,6 @@ const University: React.FC = () => {
   const [showQRCode, setShowQRCode] = useState<string | null>(null);
   const [ipfsStatus, setIpfsStatus] = useState<{ configured: boolean; message: string }>({ configured: false, message: '' });
   
-  // Form state
   const [formData, setFormData] = useState({
     studentAddress: '',
     studentName: '',
@@ -62,8 +77,6 @@ const University: React.FC = () => {
       for (const id of credentialIds) {
         try {
           const result = await contract.verifyCredential(id);
-          
-          // Try to get file and metadata CIDs from IPFS metadata
           let fileCID = '';
           let metadataCID = result.ipfsHash || '';
           
@@ -97,7 +110,6 @@ const University: React.FC = () => {
     }
   }, [contract, account]);
 
-  // Check if current account is an authorized issuer
   useEffect(() => {
     const checkIssuerStatus = async () => {
       if (contract && account) {
@@ -116,14 +128,8 @@ const University: React.FC = () => {
       }
     };
 
-    // Check IPFS configuration
     const ipfsConfig = getIPFSStatus();
     setIpfsStatus(ipfsConfig);
-    
-    if (!ipfsConfig.configured) {
-      console.warn('IPFS not configured:', ipfsConfig.message);
-    }
-
     checkIssuerStatus();
   }, [contract, account, loadIssuedCredentials]);
 
@@ -132,9 +138,9 @@ const University: React.FC = () => {
     if (file) {
       if (file.type === 'application/pdf' || file.type.startsWith('image/')) {
         setSelectedFile(file);
-        toast.success('File selected successfully');
+        toast.success('Document attached');
       } else {
-        toast.error('Please select a PDF or image file');
+        toast.error('Invalid format. Use PDF or Images.');
       }
     }
   }, []);
@@ -153,43 +159,38 @@ const University: React.FC = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const issueCredential = async () => {
+  const issue = async () => {
     if (!contract || !account || !selectedFile) {
-      toast.error('Please fill all required fields and select a file');
+      toast.error('Missing required fields');
       return;
     }
 
-    // Check IPFS configuration
     if (!isIPFSConfigured()) {
-      toast.error('IPFS is not configured. Please set REACT_APP_NFT_STORAGE_KEY in your environment.');
+      toast.error('IPFS Protocol Error: Storage Key Missing');
       return;
     }
 
     setIssuingCredential(true);
-    
     try {
-      // Create metadata
       const metadata: CredentialMetadata = createCredentialMetadata(
         formData.studentName,
         formData.credentialType,
-        issuerInfo?.name || 'Unknown University',
+        issuerInfo?.name || 'Authorized Institution',
         formData.studentAddress,
         account,
         {
           major: formData.major,
           grade: formData.grade,
           expiryDate: formData.expiryDate || undefined,
-          country: issuerInfo?.country || 'Unknown',
+          country: issuerInfo?.country || 'Node',
         }
       );
 
-      // Upload to IPFS
-      toast.success('Uploading credential to IPFS...');
+      toast.loading('Synchronizing with IPFS...', { id: 'ipfs' });
       const { metadataCID } = await uploadCredential(selectedFile, metadata);
-      toast.success('Credential uploaded to IPFS successfully!');
+      toast.success('IPFS Synchronization Complete', { id: 'ipfs' });
       
-      // Issue credential on blockchain
-      toast.success('Issuing credential on blockchain...');
+      toast.loading('Broadcasting to Ledger...', { id: 'eth' });
       const expiryTimestamp = formData.expiryDate 
         ? Math.floor(new Date(formData.expiryDate).getTime() / 1000)
         : 0;
@@ -202,10 +203,8 @@ const University: React.FC = () => {
       );
       
       await tx.wait();
+      toast.success('Record Permanently Issued', { id: 'eth' });
       
-      toast.success('Credential issued successfully!');
-      
-      // Reset form
       setFormData({
         studentAddress: '',
         studentName: '',
@@ -215,412 +214,267 @@ const University: React.FC = () => {
         expiryDate: '',
       });
       setSelectedFile(null);
-      
-      // Reload credentials
       loadIssuedCredentials();
-      
     } catch (error: any) {
-      console.error('Error issuing credential:', error);
-      
-      // Provide specific error messages
-      if (error.message?.includes('IPFS')) {
-        toast.error('IPFS upload failed: ' + error.message);
-      } else if (error.message?.includes('user rejected')) {
-        toast.error('Transaction was rejected by user');
-      } else if (error.message?.includes('insufficient funds')) {
-        toast.error('Insufficient funds for transaction');
-      } else {
-        toast.error(error.message || 'Failed to issue credential');
-      }
+      console.error('Issue error:', error);
+      toast.error(error.message || 'Issuance failed');
     } finally {
       setIssuingCredential(false);
     }
   };
 
-  const revokeCredential = async (credentialId: string) => {
+  const revoke = async (id: string) => {
     if (!contract) return;
-    
     try {
-      const tx = await contract.revokeCredential(credentialId);
+      const tx = await contract.revokeCredential(id);
       await tx.wait();
-      toast.success('Credential revoked successfully');
+      toast.success('Revocation Successful');
       loadIssuedCredentials();
     } catch (error: any) {
-      console.error('Error revoking credential:', error);
-      toast.error(error.message || 'Failed to revoke credential');
+      toast.error(error.message || 'Revocation failed');
     }
   };
 
-  const viewDocument = async (credential: IssuedCredential) => {
-    if (!credential.fileCID && !credential.metadataCID) {
-      toast.error('No document available for this credential');
-      return;
-    }
-
+  const view = async (credential: IssuedCredential) => {
+    if (!credential.fileCID && !credential.metadataCID) return;
     try {
       setViewingDocument(credential.id);
-      
-      // If we have fileCID, use it directly; otherwise try to get it from metadata
       let fileCID = credential.fileCID;
-      
       if (!fileCID && credential.metadataCID) {
         const metadata = await retrieveJSONFromIPFS(credential.metadataCID);
         fileCID = metadata.fileCID;
       }
-      
       if (fileCID) {
-        const documentUrl = getIPFSUrl(fileCID);
-        setDocumentUrl(documentUrl);
-        console.log('Document URL:', documentUrl);
-      } else {
-        toast.error('Document file not found in IPFS');
-        setViewingDocument(null);
+        setDocumentUrl(getIPFSUrl(fileCID));
       }
     } catch (error) {
-      console.error('Error viewing document:', error);
-      toast.error('Failed to load document');
+      toast.error('Load failed');
       setViewingDocument(null);
     }
   };
 
-  const closeDocumentViewer = () => {
-    setViewingDocument(null);
-    setDocumentUrl(null);
-  };
-
   if (!isConnected) {
     return (
-      <div className="text-center py-12">
-        <h1 className="text-3xl font-bold text-gray-900 mb-4">University Dashboard</h1>
-        <p className="text-gray-600">Please connect your wallet to access the university dashboard.</p>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-6">
+        <Database className="w-16 h-16 text-zinc-800" />
+        <h1 className="text-4xl font-bold tracking-tighter">Registrar Access</h1>
+        <p className="text-muted-foreground">Authenticate your administrative wallet to continue.</p>
       </div>
     );
   }
 
   if (!isAuthorizedIssuer) {
     return (
-      <div className="text-center py-12">
-        <h1 className="text-3xl font-bold text-gray-900 mb-4">University Dashboard</h1>
-        <div className="card max-w-md mx-auto">
-          <div className="text-6xl mb-4">🚫</div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Not Authorized</h2>
-          <p className="text-gray-600 mb-4">
-            Your wallet address is not registered as an authorized issuer. 
-            Please contact the system administrator to get your university registered.
-          </p>
-          <div className="bg-gray-50 p-3 rounded text-sm text-gray-500 break-all">
-            Your Address: {account}
-          </div>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-6 text-center max-w-xl mx-auto">
+        <AlertCircle className="w-16 h-16 text-zinc-800" />
+        <h1 className="text-4xl font-bold tracking-tighter">Unauthorized Node</h1>
+        <p className="text-muted-foreground">
+          This address is not registered in the system as an authorized registrar. 
+          Contact network admins for credentials.
+        </p>
+        <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-lg font-mono text-xs w-full break-all">
+          {account}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
-      <div className="text-center">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">University Dashboard</h1>
-        <p className="text-gray-600">Issue and manage academic credentials</p>
-      </div>
+    <div className="space-y-12 pb-32">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="space-y-1">
+          <h1 className="text-4xl font-bold tracking-tighter">Institution Overview</h1>
+          <div className="flex items-center text-muted-foreground text-sm font-medium">
+            <Building2 className="w-4 h-4 mr-2" />
+            {issuerInfo?.name} • Authorized Registrar
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <div className={cn(
+            "flex items-center px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest border",
+            ipfsStatus.configured ? "bg-zinc-900 border-zinc-800 text-zinc-200" : "bg-rose-950 border-rose-900 text-rose-400"
+          )}>
+            <div className={cn("w-1.5 h-1.5 rounded-full mr-2", ipfsStatus.configured ? "bg-emerald-500" : "bg-rose-500")} />
+            IPFS: {ipfsStatus.configured ? "ONLINE" : "DISCONNECTED"}
+          </div>
+        </div>
+      </header>
 
-      {issuerInfo && (
-        <div className="card">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Institution Information</h2>
-          <div className="grid md:grid-cols-3 gap-4">
-            <div>
-              <span className="text-sm text-gray-500">Name</span>
-              <p className="font-medium">{issuerInfo.name}</p>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* Form */}
+        <section className="lg:col-span-5 space-y-8">
+          <div className="matte-card p-8 space-y-8">
+            <div className="space-y-2">
+              <h2 className="text-xl font-bold">Issue Credential</h2>
+              <p className="text-sm text-muted-foreground">Create a new permanent record on the ledger.</p>
             </div>
-            <div>
-              <span className="text-sm text-gray-500">Country</span>
-              <p className="font-medium">{issuerInfo.country}</p>
-            </div>
-            <div>
-              <span className="text-sm text-gray-500">Credentials Issued</span>
-              <p className="font-medium">{issuerInfo.credentialsIssued?.toString()}</p>
+
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground pl-1">Student Address</label>
+                <input
+                  type="text"
+                  name="studentAddress"
+                  value={formData.studentAddress}
+                  onChange={handleInputChange}
+                  className="matte-input"
+                  placeholder="0x..."
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground pl-1">Recipient Name</label>
+                <input
+                  type="text"
+                  name="studentName"
+                  value={formData.studentName}
+                  onChange={handleInputChange}
+                  className="matte-input"
+                  placeholder="Legal Name"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground pl-1">Category</label>
+                  <select name="credentialType" value={formData.credentialType} onChange={handleInputChange} className="matte-input bg-zinc-900 border-zinc-800">
+                    <option value="degree">Degree</option>
+                    <option value="diploma">Diploma</option>
+                    <option value="transcript">Transcript</option>
+                    <option value="certificate">Professional</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground pl-1">Result</label>
+                  <input type="text" name="grade" value={formData.grade} onChange={handleInputChange} className="matte-input" placeholder="GPA / Grade" />
+                </div>
+              </div>
+
+              <div 
+                {...getRootProps()} 
+                className={cn(
+                  "border-2 border-dashed rounded-xl p-10 text-center transition-all cursor-pointer",
+                  isDragActive ? "border-white bg-zinc-900" : "border-zinc-800 hover:border-zinc-700"
+                )}
+              >
+                <input {...getInputProps()} />
+                {selectedFile ? (
+                  <div className="flex flex-col items-center gap-3">
+                    <CheckCircle2 className="w-8 h-8 text-white" />
+                    <span className="text-sm font-medium">{selectedFile.name}</span>
+                    <span className="text-[10px] text-muted-foreground uppercase">Ready for transmission</span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                    <Upload className="w-8 h-8" />
+                    <span className="text-sm font-medium">Attach Certificate</span>
+                    <span className="text-[10px] uppercase">PDF / IMG (MAX 10MB)</span>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={issue}
+                disabled={issuingCredential || !selectedFile}
+                className="matte-button-primary w-full h-12 text-sm font-black uppercase tracking-widest rounded-xl"
+              >
+                {issuingCredential ? (
+                  <span className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 animate-spin" />
+                    TRANSMITTING...
+                  </span>
+                ) : "Broadcast Record"}
+              </button>
             </div>
           </div>
-          
-          {/* IPFS Status */}
-          <div className="mt-4 p-3 rounded border">
-            <div className="flex items-center space-x-2">
-              <div className={`w-2 h-2 rounded-full ${
-                ipfsStatus.configured ? 'bg-green-500' : 'bg-red-500'
-              }`}></div>
-              <span className="text-sm font-medium">
-                IPFS Status: {ipfsStatus.configured ? 'Connected' : 'Not Configured'}
-              </span>
-            </div>
-            <p className="text-xs text-gray-600 mt-1">{ipfsStatus.message}</p>
-            {!ipfsStatus.configured && (
-              <p className="text-xs text-red-600 mt-1">
-                Please set REACT_APP_NFT_STORAGE_KEY in your environment to enable file uploads.
-              </p>
+        </section>
+
+        {/* List */}
+        <section className="lg:col-span-7 space-y-6">
+          <div className="flex items-center justify-between px-2">
+            <h2 className="text-xl font-bold">Ledger Records</h2>
+            <span className="text-xs font-bold text-muted-foreground uppercase">{issuedCredentials.length} Entries</span>
+          </div>
+
+          <div className="space-y-3">
+            {issuedCredentials.length === 0 ? (
+              <div className="matte-card p-20 text-center flex flex-col items-center gap-4">
+                <Database className="w-12 h-12 text-zinc-900" />
+                <p className="text-sm text-zinc-500 font-medium tracking-tight">No active records detected in local cache.</p>
+              </div>
+            ) : (
+              issuedCredentials.map((c) => (
+                <div key={c.id} className="matte-card p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-6 hover:border-zinc-700 transition-all group">
+                  <div className="space-y-3 flex-1">
+                    <div className="flex items-center gap-3">
+                       <ShieldCheck className="w-4 h-4 text-zinc-400" />
+                       <span className="text-[10px] font-black uppercase tracking-[0.2em]">{c.type}</span>
+                       <span className="text-[10px] text-zinc-600">• {c.issueDate}</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold truncate max-w-xs">{c.student}</p>
+                      <p className="text-[10px] font-mono text-zinc-600 truncate mt-1">HASH: {c.id}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => view(c)} className="w-10 h-10 flex items-center justify-center rounded-lg border border-zinc-800 hover:bg-zinc-900 transition-colors" title="View Source">
+                      <Eye className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => setShowQRCode(c.id)} className="w-10 h-10 flex items-center justify-center rounded-lg border border-zinc-800 hover:bg-zinc-900 transition-colors" title="Share Gateway">
+                      <Share2 className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => revoke(c.id)} className="w-10 h-10 flex items-center justify-center rounded-lg border border-zinc-800 hover:bg-rose-950/20 hover:border-rose-900/50 hover:text-rose-500 transition-all" title="Revoke Signature">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))
             )}
           </div>
+        </section>
+      </div>
+
+      {/* Share Modal */}
+      {showQRCode && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-6">
+          <div className="matte-card max-w-sm w-full p-10 space-y-8 animate-in zoom-in duration-300">
+             <div className="text-center space-y-2">
+               <h3 className="text-xl font-bold">Verification Gateway</h3>
+               <p className="text-xs text-muted-foreground uppercase font-black tracking-widest">Permanent Signature</p>
+             </div>
+             <div className="bg-white p-6 rounded-2xl flex justify-center shadow-2xl">
+               <QRCode value={issuedCredentials.find(c => c.id === showQRCode)?.verificationUrl || ''} size={180} renderAs="svg" />
+             </div>
+             <div className="flex flex-col gap-3">
+               <button onClick={() => {
+                 navigator.clipboard.writeText(issuedCredentials.find(c => c.id === showQRCode)?.verificationUrl || '');
+                 toast.success('Link Secured');
+               }} className="matte-button-primary rounded-xl h-12">Copy Protocol Link</button>
+               <button onClick={() => setShowQRCode(null)} className="matte-button-secondary rounded-xl h-12">Close</button>
+             </div>
+          </div>
         </div>
       )}
 
-      {/* Issue New Credential */}
-      <div className="card">
-        <h2 className="text-xl font-semibold text-gray-900 mb-6">Issue New Credential</h2>
-        
-        <div className="grid md:grid-cols-2 gap-6">
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Student Wallet Address *
-              </label>
-              <input
-                type="text"
-                name="studentAddress"
-                value={formData.studentAddress}
-                onChange={handleInputChange}
-                className="input"
-                placeholder="0x..."
-                required
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Student Name *
-              </label>
-              <input
-                type="text"
-                name="studentName"
-                value={formData.studentName}
-                onChange={handleInputChange}
-                className="input"
-                placeholder="John Doe"
-                required
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Credential Type *
-              </label>
-              <select
-                name="credentialType"
-                value={formData.credentialType}
-                onChange={handleInputChange}
-                className="select"
-                required
-              >
-                <option value="degree">Degree</option>
-                <option value="diploma">Diploma</option>
-                <option value="transcript">Transcript</option>
-                <option value="certificate">Certificate</option>
-              </select>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Major/Field of Study
-              </label>
-              <input
-                type="text"
-                name="major"
-                value={formData.major}
-                onChange={handleInputChange}
-                className="input"
-                placeholder="Computer Science"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Grade/GPA
-              </label>
-              <input
-                type="text"
-                name="grade"
-                value={formData.grade}
-                onChange={handleInputChange}
-                className="input"
-                placeholder="3.8/4.0"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Expiry Date (Optional)
-              </label>
-              <input
-                type="date"
-                name="expiryDate"
-                value={formData.expiryDate}
-                onChange={handleInputChange}
-                className="input"
-              />
-            </div>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Upload Credential Document *
-            </label>
-            <div
-              {...getRootProps()}
-              className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
-                isDragActive
-                  ? 'border-primary-400 bg-primary-50'
-                  : 'border-gray-300 hover:border-gray-400'
-              }`}
-            >
-              <input {...getInputProps()} />
-              {selectedFile ? (
-                <div>
-                  <div className="text-4xl mb-2">📄</div>
-                  <p className="text-sm font-medium text-gray-900">{selectedFile.name}</p>
-                  <p className="text-xs text-gray-500">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
-                </div>
-              ) : (
-                <div>
-                  <div className="text-4xl mb-2">📤</div>
-                  <p className="text-sm text-gray-600">
-                    Drag & drop a file here, or click to select
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    PDF or image files only
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-        
-        <div className="mt-6">
-          <button
-            onClick={issueCredential}
-            disabled={issuingCredential || !selectedFile || !formData.studentAddress || !formData.studentName}
-            className="btn-primary w-full md:w-auto"
-          >
-            {issuingCredential ? 'Issuing Credential...' : 'Issue Credential'}
-          </button>
-        </div>
-      </div>
-
-      {/* Issued Credentials */}
-      <div className="card">
-        <h2 className="text-xl font-semibold text-gray-900 mb-6">Issued Credentials</h2>
-        
-        {issuedCredentials.length === 0 ? (
-          <p className="text-gray-500 text-center py-8">No credentials issued yet</p>
-        ) : (
-          <div className="space-y-4">
-            {issuedCredentials.map((credential) => (
-              <div key={credential.id} className="border rounded-lg p-4">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <span className="px-2 py-1 bg-primary-100 text-primary-800 text-xs rounded">
-                        {credential.type}
-                      </span>
-                      <span className="text-sm text-gray-500">
-                        Issued on {credential.issueDate}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-600 mb-1">
-                      Student: {credential.student}
-                    </p>
-                    <p className="text-xs text-gray-400 break-all">
-                      ID: {credential.id}
-                    </p>
-                  </div>
-                  <div className="flex space-x-2 ml-4">
-                    <button
-                      onClick={() => viewDocument(credential)}
-                      className="btn-primary text-sm"
-                      disabled={!credential.fileCID && !credential.metadataCID}
-                    >
-                      View Document
-                    </button>
-                    <button
-                      onClick={() => setShowQRCode(credential.id)}
-                      className="btn-secondary text-sm"
-                    >
-                      QR Code
-                    </button>
-                    <button
-                      onClick={() => revokeCredential(credential.id)}
-                      className="btn-danger text-sm"
-                    >
-                      Revoke
-                    </button>
-                  </div>
-                </div>
+      {/* View Modal */}
+      {viewingDocument && documentUrl && (
+        <div className="fixed inset-0 bg-black/90 z-[300] flex flex-col p-4 md:p-10 animate-in fade-in duration-300">
+          <div className="flex justify-between items-center mb-6">
+            <div className="flex items-center gap-3">
+              <FileText className="w-6 h-6 text-white" />
+              <div>
+                <h3 className="font-bold">Encrypted Archive</h3>
+                <p className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Source Authenticated by IPFS</p>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* QR Code Modal */}
-      {showQRCode && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg max-w-sm w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">Verification QR Code</h3>
-            <div className="flex justify-center mb-4">
-              <QRCode
-                value={issuedCredentials.find(c => c.id === showQRCode)?.verificationUrl || ''}
-                size={200}
-              />
             </div>
-            <p className="text-sm text-gray-600 text-center mb-4">
-              Scan to verify credential
-            </p>
-            <button
-              onClick={() => setShowQRCode(null)}
-              className="btn-secondary w-full"
-            >
-              Close
+            <button onClick={() => { setViewingDocument(null); setDocumentUrl(null); }} className="w-12 h-12 flex items-center justify-center rounded-full hover:bg-zinc-900 transition-colors">
+              <X className="w-6 h-6" />
             </button>
           </div>
-        </div>
-      )}
-
-      {/* Document Viewer Modal */}
-      {viewingDocument && documentUrl && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg max-w-4xl w-full mx-4 h-5/6 flex flex-col">
-            <div className="flex justify-between items-center p-4 border-b">
-              <h3 className="text-lg font-semibold">Document Viewer</h3>
-              <div className="flex space-x-2">
-                <a
-                  href={documentUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn-secondary text-sm"
-                >
-                  Open in New Tab
-                </a>
-                <button
-                  onClick={closeDocumentViewer}
-                  className="btn-secondary text-sm"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 p-4">
-              {documentUrl.toLowerCase().includes('.pdf') ? (
-                <iframe
-                  src={documentUrl}
-                  className="w-full h-full border rounded"
-                  title="PDF Viewer"
-                />
-              ) : (
-                <div className="flex justify-center items-center h-full">
-                  <img
-                    src={documentUrl}
-                    alt="Document"
-                    className="max-w-full max-h-full object-contain"
-                  />
-                </div>
-              )}
-            </div>
+          <div className="flex-1 rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-950 relative">
+            <iframe src={documentUrl} className="w-full h-full border-none" title="Document Viewer" />
           </div>
         </div>
       )}

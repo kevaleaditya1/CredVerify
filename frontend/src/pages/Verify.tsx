@@ -1,347 +1,254 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { useWeb3 } from '../contexts/Web3Context';
+import { 
+  ShieldCheck, 
+  ShieldAlert, 
+  Search, 
+  Clock, 
+  Calendar, 
+  User, 
+  Award, 
+  Building2, 
+  ExternalLink,
+  ChevronRight,
+  Database,
+  FileText,
+  Lock,
+  X
+} from 'lucide-react';
+import { cn } from '../lib/utils';
+import { retrieveJSONFromIPFS, getIPFSUrl } from '../utils/ipfs';
+import { isValidCredentialId } from '../utils/verification';
 
-// Import real verification utilities
-import {
-  isValidCredentialId
-} from '../utils/verification';
-// IPFS utilities available if needed
-// import { getIPFSUrl } from '../utils/ipfs';
-
-interface CredentialData {
+interface VerificationDetails {
   credentialId: string;
-  isValid: boolean;
+  student: string;
   issuer: string;
   issuerName: string;
-  student: string;
   credentialType: string;
   issueDate: string;
   expiryDate: string;
+  isValid: boolean;
   isRevoked: boolean;
-  ipfsHash?: string;
+  ipfsHash: string;
   metadata?: any;
 }
 
 const Verify: React.FC = () => {
   const [searchParams] = useSearchParams();
   const { contract } = useWeb3();
-  const [credentialData, setCredentialData] = useState<CredentialData | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [details, setDetails] = useState<VerificationDetails | null>(null);
+  const [manualId, setManualId] = useState('');
+  const [viewingDocument, setViewingDocument] = useState(false);
+  const [documentUrl, setDocumentUrl] = useState<string | null>(null);
 
-  const verifyCredential = useCallback(async (credentialId: string) => {
-    if (!contract) {
-      throw new Error('Contract not connected');
-    }
-
+  const verify = useCallback(async (id: string) => {
+    if (!contract || !isValidCredentialId(id)) return;
+    setLoading(true);
+    setDetails(null);
     try {
-      const result = await contract.verifyCredential(credentialId);
-      
-      // Get issuer information
-      let issuerName = 'Unknown Institution';
+      const result = await contract.verifyCredential(id);
+      let issuerName = 'Authorized Registrar';
       try {
         const issuer = await contract.issuers(result.issuer);
-        issuerName = issuer.name || 'Unknown Institution';
-      } catch {
-        // Issuer might not be registered
+        issuerName = issuer.name || 'Authorized Registrar';
+      } catch {}
+
+      let metadata = null;
+      if (result.ipfsHash) {
+        try {
+          metadata = await retrieveJSONFromIPFS(result.ipfsHash);
+        } catch (e) {
+          console.log('Metadata load failed');
+        }
       }
 
-      const credentialData: CredentialData = {
-        credentialId,
-        isValid: result.isValid,
+      setDetails({
+        credentialId: id,
+        student: result.student,
         issuer: result.issuer,
         issuerName,
-        student: result.student,
         credentialType: result.credentialType,
         issueDate: new Date(Number(result.issueDate) * 1000).toLocaleDateString(),
         expiryDate: result.expiryDate > 0 
           ? new Date(Number(result.expiryDate) * 1000).toLocaleDateString()
-          : 'No expiry',
+          : 'Permanent',
+        isValid: result.isValid,
         isRevoked: result.isRevoked,
-      };
-
-      setCredentialData(credentialData);
-      setError(null);
-
-    } catch (error: any) {
-      console.error('Verification error:', error);
+        ipfsHash: result.ipfsHash,
+        metadata
+      });
       
-      if (error.message?.includes('Credential does not exist')) {
-        setError('Credential not found. Please check the credential ID.');
-      } else {
-        setError('Verification failed. Please try again.');
-      }
-      setCredentialData(null);
-    }
-  }, [contract]);
-
-  const verifyCredentialFromUrl = useCallback(async (
-    credentialId: string,
-    contractAddress: string | null,
-    chainId: string | null
-  ) => {
-    if (!contract) {
-      setError('Blockchain connection not available. Please connect your wallet.');
-      return;
-    }
-
-    if (!isValidCredentialId(credentialId)) {
-      setError('Invalid credential ID format');
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      await verifyCredential(credentialId);
-    } catch (error) {
-      console.error('Auto-verification error:', error);
-      setError('Failed to verify credential automatically');
+      if (result.isValid && !result.isRevoked) toast.success('Integrity Verified');
+      else toast.error('Check Status Flagged');
+    } catch (error: any) {
+      toast.error('Record not found on-chain');
     } finally {
       setLoading(false);
     }
-  }, [contract, verifyCredential]);
+  }, [contract]);
 
   useEffect(() => {
-    const credentialId = searchParams.get('id');
-    const contractAddress = searchParams.get('contract');
-    const chainId = searchParams.get('chain');
-
-    if (credentialId) {
-      verifyCredentialFromUrl(credentialId, contractAddress, chainId);
+    const id = searchParams.get('id');
+    if (id) {
+       setManualId(id);
+       verify(id);
     }
-  }, [searchParams, contract, verifyCredentialFromUrl]);
+  }, [searchParams, verify]);
 
-  const getStatusColor = () => {
-    if (!credentialData) return '';
-    if (credentialData.isRevoked) return 'text-danger-600 bg-danger-50 border-danger-200';
-    if (!credentialData.isValid) return 'text-warning-600 bg-warning-50 border-warning-200';
-    return 'text-success-600 bg-success-50 border-success-200';
-  };
-
-  const getStatusIcon = () => {
-    if (!credentialData) return '';
-    if (credentialData.isRevoked) return '❌';
-    if (!credentialData.isValid) return '⚠️';
-    return '✅';
-  };
-
-  const getStatusText = () => {
-    if (!credentialData) return '';
-    if (credentialData.isRevoked) return 'REVOKED';
-    if (!credentialData.isValid) return 'INVALID';
-    return 'VERIFIED';
-  };
-
-  const getTypeIcon = (type: string) => {
-    switch (type?.toLowerCase()) {
-      case 'degree':
-        return '🎓';
-      case 'diploma':
-        return '📜';
-      case 'transcript':
-        return '📋';
-      case 'certificate':
-        return '🏆';
-      default:
-        return '📄';
+  const viewSource = async () => {
+    if (!details?.metadata?.fileCID) {
+      toast.error('No source linked');
+      return;
     }
+    setDocumentUrl(getIPFSUrl(details.metadata.fileCID));
+    setViewingDocument(true);
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      <div className="text-center">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Credential Verification</h1>
-        <p className="text-gray-600">Verify the authenticity of academic credentials</p>
-      </div>
+    <div className="space-y-16 pb-32">
+      <header className="text-center space-y-4 max-w-2xl mx-auto">
+        <h1 className="text-5xl font-bold tracking-tighter">Audit Terminal</h1>
+        <p className="text-muted-foreground text-lg italic tracking-tight">Authenticate any academic record instantly using the Ethereum decentralized ledger.</p>
+      </header>
 
-      {loading && (
-        <div className="card text-center py-12">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary-600 mx-auto mb-4"></div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Verifying Credential</h2>
-          <p className="text-gray-600">Please wait while we check the blockchain...</p>
+      {/* Audit Input */}
+      <section className="max-w-3xl mx-auto">
+        <div className="matte-card p-1">
+           <div className="bg-zinc-950 p-2 rounded-[inherit] flex flex-col md:flex-row gap-2">
+             <div className="relative flex-1 group">
+               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-700 group-focus-within:text-white transition-colors" />
+               <input
+                 type="text"
+                 value={manualId}
+                 onChange={(e) => setManualId(e.target.value)}
+                 className="w-full bg-zinc-900 border-none h-14 pl-12 pr-4 rounded-xl text-sm focus:ring-1 focus:ring-zinc-700 focus:bg-black transition-all"
+                 placeholder="Enter Unique Signature (0x...)"
+               />
+             </div>
+             <button
+               onClick={() => verify(manualId)}
+               disabled={loading || !manualId}
+               className="matte-button-primary h-14 px-10 rounded-xl font-black uppercase tracking-widest"
+             >
+               {loading ? "SEARCHING..." : "AUDIT RECORD"}
+             </button>
+           </div>
         </div>
+      </section>
+
+      {/* Results */}
+      {details && (
+        <section className="animate-in fade-in slide-in-from-top-12 duration-700">
+           <div className={cn(
+             "matte-card p-12 lg:p-20 relative overflow-hidden",
+             details.isValid && !details.isRevoked ? "border-emerald-900/30" : "border-rose-900/30"
+           )}>
+             {/* Background Decoration */}
+             <div className="absolute top-0 right-0 w-full h-full bg-[radial-gradient(circle_at_100%_0%,rgba(255,255,255,0.02),transparent)]" />
+             
+             <div className="relative grid grid-cols-1 lg:grid-cols-12 gap-16 items-start">
+                {/* Result Indicator */}
+                <div className="lg:col-span-4 flex flex-col items-center justify-center space-y-8 text-center bg-zinc-900/50 p-12 rounded-[3rem] border border-zinc-800">
+                   {details.isValid && !details.isRevoked ? (
+                     <div className="w-32 h-32 bg-emerald-950 border border-emerald-900/50 rounded-full flex items-center justify-center shadow-[0_0_50px_rgba(16,185,129,0.1)]">
+                        <ShieldCheck className="w-14 h-14 text-emerald-500" />
+                     </div>
+                   ) : (
+                     <div className="w-32 h-32 bg-rose-950 border border-rose-900/50 rounded-full flex items-center justify-center">
+                        <ShieldAlert className="w-14 h-14 text-rose-500" />
+                     </div>
+                   )}
+                   <div className="space-y-2">
+                     <h2 className="text-4xl font-bold uppercase italic tracking-tighter">
+                       {details.isValid && !details.isRevoked ? "Authentic" : "Invalid"}
+                     </h2>
+                     <p className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-500">Live Ledger Verification</p>
+                   </div>
+                </div>
+
+                {/* Detail Grid */}
+                <div className="lg:col-span-8 flex flex-col gap-12">
+                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-16 gap-y-10">
+                      <div className="space-y-2">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-zinc-600">Category</span>
+                        <p className="text-xl font-bold capitalize">{details.credentialType}</p>
+                      </div>
+                      <div className="space-y-2">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-zinc-600">Registrar Hub</span>
+                        <p className="text-xl font-bold">{details.issuerName}</p>
+                      </div>
+                      <div className="space-y-2">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-zinc-600">Issuance Date</span>
+                        <p className="text-base font-bold">{details.issueDate}</p>
+                      </div>
+                      <div className="space-y-2">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-zinc-600">Validity Cap</span>
+                        <p className="text-base font-bold">{details.expiryDate}</p>
+                      </div>
+                   </div>
+
+                   <div className="space-y-6 pt-10 border-t border-zinc-900">
+                      <div className="p-6 bg-zinc-900 border border-zinc-800 rounded-2xl space-y-4">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Public Recipient Address</span>
+                        <p className="text-xs font-mono text-zinc-400 break-all select-all">{details.student}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-4">
+                        <button onClick={viewSource} className="matte-button-primary h-12 px-8 rounded-xl text-xs gap-2">
+                          <FileText className="w-4 h-4" />
+                          SOURCE DOCUMENT
+                        </button>
+                        <Link to="/" className="matte-button-secondary h-12 px-8 rounded-xl text-xs bg-zinc-900 border-zinc-800 hover:bg-zinc-800 flex items-center justify-center">
+                          RETURN PORTAL
+                        </Link>
+                      </div>
+                   </div>
+                </div>
+             </div>
+           </div>
+        </section>
       )}
 
-      {error && (
-        <div className="card border-danger-200 bg-danger-50">
-          <div className="text-center py-8">
-            <div className="text-6xl mb-4">❌</div>
-            <h2 className="text-xl font-semibold text-danger-900 mb-2">Verification Failed</h2>
-            <p className="text-danger-700 mb-4">{error}</p>
-            <div className="bg-danger-100 border border-danger-200 rounded-lg p-4 max-w-md mx-auto">
-              <p className="text-danger-800 text-sm">
-                <strong>Possible reasons:</strong>
-                <br />• Invalid credential ID
-                <br />• Credential does not exist
-                <br />• Network connection issues
-                <br />• Contract not deployed on this network
-              </p>
+      {/* Source View Modal */}
+      {viewingDocument && documentUrl && (
+        <div className="fixed inset-0 bg-black/95 z-[500] flex flex-col p-4 md:p-10 animate-in fade-in duration-300">
+          <div className="flex justify-between items-center mb-6 max-w-7xl mx-auto w-full">
+            <div className="flex items-center gap-3">
+              <Lock className="w-6 h-6 text-zinc-500" />
+              <div>
+                <h3 className="font-bold">Encrypted Data Source</h3>
+                <p className="text-[10px] text-zinc-600 uppercase font-black tracking-widest">Verified by IPFS Protocol</p>
+              </div>
             </div>
+            <button onClick={() => setViewingDocument(false)} className="w-12 h-12 flex items-center justify-center rounded-full hover:bg-zinc-900 transition-colors">
+              <X className="w-6 h-6" />
+            </button>
           </div>
-        </div>
-      )}
-
-      {credentialData && (
-        <div className="space-y-6">
-          {/* Main Verification Result */}
-          <div className={`card border-2 ${getStatusColor()}`}>
-            <div className="text-center py-8">
-              <div className="text-8xl mb-4">{getStatusIcon()}</div>
-              <h2 className="text-3xl font-bold mb-2">{getStatusText()}</h2>
-              <p className="text-lg opacity-75">
-                This credential has been {credentialData.isValid && !credentialData.isRevoked ? 'verified' : 'flagged'} on the blockchain
-              </p>
-            </div>
-          </div>
-
-          {/* Credential Details */}
-          <div className="card">
-            <h3 className="text-xl font-semibold text-gray-900 mb-6">Credential Details</h3>
-            
-            <div className="grid md:grid-cols-2 gap-8">
-              <div className="space-y-6">
-                <div className="text-center">
-                  <div className="text-6xl mb-2">{getTypeIcon(credentialData.credentialType)}</div>
-                  <h4 className="text-xl font-semibold capitalize text-gray-900">
-                    {credentialData.credentialType}
-                  </h4>
-                </div>
-                
-                <div className="space-y-4">
-                  <div>
-                    <span className="text-sm font-medium text-gray-500">Issuing Institution</span>
-                    <p className="text-lg font-semibold text-gray-900">{credentialData.issuerName}</p>
-                  </div>
-                  
-                  <div>
-                    <span className="text-sm font-medium text-gray-500">Issue Date</span>
-                    <p className="text-lg font-semibold text-gray-900">{credentialData.issueDate}</p>
-                  </div>
-                  
-                  <div>
-                    <span className="text-sm font-medium text-gray-500">Expiry Date</span>
-                    <p className="text-lg font-semibold text-gray-900">{credentialData.expiryDate}</p>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="space-y-4">
-                <div>
-                  <span className="text-sm font-medium text-gray-500">Student Wallet Address</span>
-                  <p className="font-mono text-sm bg-gray-50 p-3 rounded border break-all">
-                    {credentialData.student}
-                  </p>
-                </div>
-                
-                <div>
-                  <span className="text-sm font-medium text-gray-500">Issuer Wallet Address</span>
-                  <p className="font-mono text-sm bg-gray-50 p-3 rounded border break-all">
-                    {credentialData.issuer}
-                  </p>
-                </div>
-                
-                <div>
-                  <span className="text-sm font-medium text-gray-500">Credential ID</span>
-                  <p className="font-mono text-sm bg-gray-50 p-3 rounded border break-all">
-                    {credentialData.credentialId}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Status Explanations */}
-          {credentialData.isRevoked && (
-            <div className="card border-danger-200 bg-danger-50">
-              <div className="flex items-start space-x-3">
-                <div className="text-2xl">⚠️</div>
-                <div>
-                  <h4 className="font-semibold text-danger-900 mb-1">Credential Revoked</h4>
-                  <p className="text-danger-700 text-sm">
-                    This credential has been revoked by the issuing institution and is no longer valid. 
-                    This may be due to various reasons such as incorrect information, policy changes, or security concerns.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {!credentialData.isValid && !credentialData.isRevoked && (
-            <div className="card border-warning-200 bg-warning-50">
-              <div className="flex items-start space-x-3">
-                <div className="text-2xl">⚠️</div>
-                <div>
-                  <h4 className="font-semibold text-warning-900 mb-1">Credential Invalid</h4>
-                  <p className="text-warning-700 text-sm">
-                    This credential is invalid. This may be due to expiration, the issuing institution 
-                    no longer being authorized, or other verification requirements not being met.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {credentialData.isValid && !credentialData.isRevoked && (
-            <div className="card border-success-200 bg-success-50">
-              <div className="flex items-start space-x-3">
-                <div className="text-2xl">✅</div>
-                <div>
-                  <h4 className="font-semibold text-success-900 mb-1">Credential Verified</h4>
-                  <p className="text-success-700 text-sm">
-                    This credential is authentic and has been successfully verified on the blockchain. 
-                    The issuing institution is authorized and the credential has not been revoked.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Verification Steps */}
-          <div className="card bg-gray-50">
-            <h4 className="font-semibold text-gray-900 mb-4">How This Verification Works</h4>
-            <div className="grid md:grid-cols-3 gap-4">
-              <div className="text-center">
-                <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center text-primary-600 font-bold mx-auto mb-2">
-                  1
-                </div>
-                <h5 className="font-medium text-gray-900 mb-1">Blockchain Check</h5>
-                <p className="text-sm text-gray-600">Credential hash verified on Ethereum blockchain</p>
-              </div>
-              <div className="text-center">
-                <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center text-primary-600 font-bold mx-auto mb-2">
-                  2
-                </div>
-                <h5 className="font-medium text-gray-900 mb-1">Issuer Validation</h5>
-                <p className="text-sm text-gray-600">Issuing institution authorization confirmed</p>
-              </div>
-              <div className="text-center">
-                <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center text-primary-600 font-bold mx-auto mb-2">
-                  3
-                </div>
-                <h5 className="font-medium text-gray-900 mb-1">Status Check</h5>
-                <p className="text-sm text-gray-600">Revocation and expiry status verified</p>
-              </div>
-            </div>
+          <div className="flex-1 rounded-[2rem] overflow-hidden border border-zinc-800 bg-zinc-950 relative max-w-7xl mx-auto w-full">
+            <iframe src={documentUrl} className="w-full h-full border-none" title="Source Document" />
           </div>
         </div>
       )}
 
-      {!loading && !error && !credentialData && (
-        <div className="card text-center py-12">
-          <div className="text-6xl mb-4">🔍</div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Ready to Verify</h2>
-          <p className="text-gray-600 mb-6">
-            This page will automatically verify credentials when accessed through a verification link or QR code.
-          </p>
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-md mx-auto">
-            <p className="text-blue-800 text-sm">
-              💡 To verify a credential, use the verification link or QR code provided by the credential holder.
-            </p>
+      {/* Footer Visuals */}
+      {!details && (
+        <footer className="grid grid-cols-1 md:grid-cols-3 gap-8 opacity-20 transition-all">
+          <div className="flex flex-col items-center gap-4 text-center">
+             <Database className="w-10 h-10" />
+             <p className="text-xs font-bold uppercase tracking-widest leading-relaxed">Immutable State <br /> Consensus</p>
           </div>
-        </div>
+          <div className="flex flex-col items-center gap-4 text-center">
+             <ShieldCheck className="w-10 h-10" />
+             <p className="text-xs font-bold uppercase tracking-widest leading-relaxed">Cryptographic <br /> Authenticity</p>
+          </div>
+          <div className="flex flex-col items-center gap-4 text-center">
+             <ExternalLink className="w-10 h-10" />
+             <p className="text-xs font-bold uppercase tracking-widest leading-relaxed">Global <br /> Synchronization</p>
+          </div>
+        </footer>
       )}
     </div>
   );

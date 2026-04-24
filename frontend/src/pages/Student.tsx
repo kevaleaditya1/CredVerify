@@ -2,388 +2,250 @@ import React, { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { useWeb3 } from '../contexts/Web3Context';
 import QRCode from 'qrcode.react';
+import { 
+  UserCircle, 
+  Wallet, 
+  Award, 
+  Trash2, 
+  Share2, 
+  Eye, 
+  ShieldCheck, 
+  Clock, 
+  Download, 
+  FileText,
+  Shapes,
+  ExternalLink,
+  ChevronRight,
+  Database,
+  X
+} from 'lucide-react';
+import { cn } from '../lib/utils';
 
-// Import real verification utilities
+// Import real IPFS and verification utilities
 import {
-  generateVerificationUrl,
-  formatCredentialId,
-  shareVerificationUrl,
-  copyToClipboard
-} from '../utils/verification';
-// IPFS utilities available if needed
-// import { getIPFSUrl } from '../utils/ipfs';
+  retrieveJSONFromIPFS,
+  getIPFSUrl,
+} from '../utils/ipfs';
+import { generateVerificationUrl } from '../utils/verification';
 
-interface StudentCredential {
+interface Credential {
   id: string;
   issuer: string;
   issuerName: string;
-  credentialType: string;
+  type: string;
   issueDate: string;
   expiryDate: string;
-  isValid: boolean;
-  isRevoked: boolean;
   ipfsHash: string;
   verificationUrl: string;
+  fileCID?: string;
+  metadata?: any;
 }
 
 const Student: React.FC = () => {
   const { account, contract, isConnected } = useWeb3();
-  const [credentials, setCredentials] = useState<StudentCredential[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [selectedCredential, setSelectedCredential] = useState<StudentCredential | null>(null);
+  const [credentials, setCredentials] = useState<Credential[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showQRCode, setShowQRCode] = useState<string | null>(null);
+  const [viewingDocument, setViewingDocument] = useState<string | null>(null);
+  const [documentUrl, setDocumentUrl] = useState<string | null>(null);
 
-  const loadStudentCredentials = useCallback(async () => {
+  const loadCredentials = useCallback(async () => {
     if (!contract || !account) return;
     
     setLoading(true);
     try {
       const credentialIds = await contract.getStudentCredentials(account);
-      const loadedCredentials: StudentCredential[] = [];
+      const creds: Credential[] = [];
       
       for (const id of credentialIds) {
         try {
           const result = await contract.verifyCredential(id);
-          
-          // Get issuer information
-          let issuerName = 'Unknown University';
+          let issuerName = 'Authorized Entity';
           try {
             const issuer = await contract.issuers(result.issuer);
-            issuerName = issuer.name || 'Unknown University';
-          } catch {
-            // Issuer might not be registered anymore
+            issuerName = issuer.name || 'Authorized Entity';
+          } catch {}
+
+          let fileCID = '';
+          let metadata = null;
+          if (result.ipfsHash) {
+            try {
+              metadata = await retrieveJSONFromIPFS(result.ipfsHash);
+              fileCID = metadata.fileCID || '';
+            } catch (e) {
+              console.log('Metadata sync failed for', id);
+            }
           }
           
-          const credential: StudentCredential = {
+          creds.push({
             id,
             issuer: result.issuer,
             issuerName,
-            credentialType: result.credentialType,
+            type: result.credentialType,
             issueDate: new Date(Number(result.issueDate) * 1000).toLocaleDateString(),
             expiryDate: result.expiryDate > 0 
               ? new Date(Number(result.expiryDate) * 1000).toLocaleDateString()
-              : 'No expiry',
-            isValid: result.isValid,
-            isRevoked: result.isRevoked,
-            ipfsHash: '', // We don't expose IPFS hash in verification result
+              : 'Permanent',
+            ipfsHash: result.ipfsHash,
             verificationUrl: generateVerificationUrl(id, await contract.getAddress(), 17000),
-          };
-          
-          loadedCredentials.push(credential);
+            fileCID,
+            metadata,
+          });
         } catch (error) {
-          console.error('Error loading credential:', error);
+          console.error('Error fetching credential info:', error);
         }
       }
       
-      setCredentials(loadedCredentials);
+      setCredentials(creds);
     } catch (error) {
-      console.error('Error loading student credentials:', error);
-      toast.error('Failed to load credentials');
+      console.error('Error loading credentials:', error);
     } finally {
       setLoading(false);
     }
   }, [contract, account]);
 
   useEffect(() => {
-    if (isConnected && contract && account) {
-      loadStudentCredentials();
-    }
-  }, [isConnected, contract, account, loadStudentCredentials]);
+    if (isConnected) loadCredentials();
+  }, [isConnected, loadCredentials]);
 
-  const shareCredential = async (credential: StudentCredential) => {
-    const success = await shareVerificationUrl(
-      credential.verificationUrl,
-      credential.credentialType,
-      credential.issuerName
-    );
-    if (!success) {
-      // Fallback already handled by shareVerificationUrl
-      toast.success('Verification link copied to clipboard!');
-    }
-  };
-
-  const getStatusBadge = (credential: StudentCredential) => {
-    if (credential.isRevoked) {
-      return <span className="px-2 py-1 bg-danger-100 text-danger-800 text-xs rounded">Revoked</span>;
-    } else if (!credential.isValid) {
-      return <span className="px-2 py-1 bg-warning-100 text-warning-800 text-xs rounded">Invalid</span>;
-    } else {
-      return <span className="px-2 py-1 bg-success-100 text-success-800 text-xs rounded">Valid</span>;
-    }
-  };
-
-  const getTypeIcon = (type: string) => {
-    switch (type.toLowerCase()) {
-      case 'degree':
-        return '🎓';
-      case 'diploma':
-        return '📜';
-      case 'transcript':
-        return '📋';
-      case 'certificate':
-        return '🏆';
-      default:
-        return '📄';
+  const view = async (c: Credential) => {
+    if (!c.fileCID && !c.ipfsHash) return;
+    try {
+      setViewingDocument(c.id);
+      let fileCID = c.fileCID;
+      if (!fileCID && c.ipfsHash) {
+        const metadata = await retrieveJSONFromIPFS(c.ipfsHash);
+        fileCID = metadata.fileCID;
+      }
+      if (fileCID) {
+        setDocumentUrl(getIPFSUrl(fileCID));
+      }
+    } catch (error) {
+      toast.error('Source link broken');
+      setViewingDocument(null);
     }
   };
 
   if (!isConnected) {
     return (
-      <div className="text-center py-12">
-        <h1 className="text-3xl font-bold text-gray-900 mb-4">Student Dashboard</h1>
-        <p className="text-gray-600">Please connect your wallet to view your credentials.</p>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-6">
+        <UserCircle className="w-16 h-16 text-zinc-800" />
+        <h1 className="text-4xl font-bold tracking-tighter">Personal Vault</h1>
+        <p className="text-muted-foreground">Authorize your identity wallet to access your records.</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
-      <div className="text-center">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Student Dashboard</h1>
-        <p className="text-gray-600">View and share your verified academic credentials</p>
-      </div>
-
-      {/* Account Info */}
-      <div className="card">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Account Information</h2>
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="text-sm text-gray-500">Wallet Address</span>
-            <p className="font-mono text-sm bg-gray-50 p-2 rounded">{account}</p>
-          </div>
-          <div className="text-right">
-            <span className="text-sm text-gray-500">Total Credentials</span>
-            <p className="text-2xl font-bold text-primary-600">{credentials.length}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Credentials Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="card text-center">
-          <div className="text-3xl mb-2">✅</div>
-          <div className="text-2xl font-bold text-success-600">
-            {credentials.filter(c => c.isValid && !c.isRevoked).length}
-          </div>
-          <div className="text-sm text-gray-600">Valid Credentials</div>
-        </div>
-        <div className="card text-center">
-          <div className="text-3xl mb-2">⚠️</div>
-          <div className="text-2xl font-bold text-warning-600">
-            {credentials.filter(c => !c.isValid && !c.isRevoked).length}
-          </div>
-          <div className="text-sm text-gray-600">Expired/Invalid</div>
-        </div>
-        <div className="card text-center">
-          <div className="text-3xl mb-2">❌</div>
-          <div className="text-2xl font-bold text-danger-600">
-            {credentials.filter(c => c.isRevoked).length}
-          </div>
-          <div className="text-sm text-gray-600">Revoked</div>
-        </div>
-      </div>
-
-      {/* Credentials List */}
-      <div className="card">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-semibold text-gray-900">My Credentials</h2>
-          <button
-            onClick={loadStudentCredentials}
-            disabled={loading}
-            className="btn-secondary"
-          >
-            {loading ? 'Loading...' : 'Refresh'}
-          </button>
+    <div className="space-y-12 pb-32">
+      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="space-y-1">
+          <h1 className="text-4xl font-bold tracking-tighter">My Credentials</h1>
+          <p className="text-muted-foreground text-sm font-medium">Sovereign identity storage on Ethereum.</p>
         </div>
         
-        {loading ? (
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-            <p className="text-gray-600 mt-4">Loading your credentials...</p>
-          </div>
-        ) : credentials.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">📚</div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No Credentials Yet</h3>
-            <p className="text-gray-600 mb-6">
-              You don't have any credentials issued to your wallet address yet.
-            </p>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-md mx-auto">
-              <p className="text-blue-800 text-sm">
-                💡 Ask your university to issue credentials to your wallet address: 
-                <br />
-                <code className="bg-blue-100 px-1 rounded text-xs">{account}</code>
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {credentials.map((credential) => (
-              <div
-                key={credential.id}
-                className="border rounded-lg p-6 hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start space-x-4 flex-1">
-                    <div className="text-4xl">{getTypeIcon(credential.credentialType)}</div>
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2 mb-2">
-                        <h3 className="text-lg font-semibold text-gray-900 capitalize">
-                          {credential.credentialType}
-                        </h3>
-                        {getStatusBadge(credential)}
-                      </div>
-                      <p className="text-gray-600 mb-1">
-                        <span className="font-medium">Issued by:</span> {credential.issuerName}
-                      </p>
-                      <p className="text-sm text-gray-500 mb-1">
-                        <span className="font-medium">Issue Date:</span> {credential.issueDate}
-                      </p>
-                      <p className="text-sm text-gray-500 mb-1">
-                        <span className="font-medium">Expiry:</span> {credential.expiryDate}
-                      </p>
-                      <p className="text-xs text-gray-400 font-mono break-all">
-                        ID: {formatCredentialId(credential.id)}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex flex-col space-y-2 ml-4">
-                    <button
-                      onClick={() => setSelectedCredential(credential)}
-                      className="btn-primary text-sm"
-                    >
-                      View Details
-                    </button>
-                    <button
-                      onClick={() => setShowQRCode(credential.id)}
-                      className="btn-secondary text-sm"
-                    >
-                      QR Code
-                    </button>
-                    <button
-                      onClick={() => shareCredential(credential)}
-                      className="btn-secondary text-sm"
-                    >
-                      Share
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+        <div className="flex items-center gap-3 px-4 py-2 bg-black border border-zinc-900 rounded-2xl shadow-2xl">
+          <div className="w-2 h-2 rounded-full bg-emerald-500" />
+          <span className="text-xs font-bold text-zinc-400 font-mono italic">{account?.slice(0, 12)}...</span>
+        </div>
+      </header>
 
-      {/* Credential Details Modal */}
-      {selectedCredential && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex justify-between items-start mb-4">
-                <h3 className="text-xl font-semibold text-gray-900">Credential Details</h3>
-                <button
-                  onClick={() => setSelectedCredential(null)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  ✕
-                </button>
-              </div>
-              
-              <div className="space-y-4">
-                <div className="text-center">
-                  <div className="text-6xl mb-2">{getTypeIcon(selectedCredential.credentialType)}</div>
-                  <h4 className="text-lg font-semibold capitalize">{selectedCredential.credentialType}</h4>
-                  {getStatusBadge(selectedCredential)}
-                </div>
-                
-                <div className="border-t pt-4 space-y-3">
-                  <div>
-                    <span className="text-sm font-medium text-gray-700">Issuing Institution:</span>
-                    <p className="text-gray-900">{selectedCredential.issuerName}</p>
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-pulse">
+           {[1,2,3].map(i => <div key={i} className="matte-card h-64 border-zinc-900/50 bg-zinc-950" />)}
+        </div>
+      ) : credentials.length === 0 ? (
+        <div className="matte-card p-32 text-center flex flex-col items-center gap-6">
+          <Database className="w-16 h-16 text-zinc-900" />
+          <div className="space-y-2">
+            <h3 className="text-xl font-bold">No Records Broadcasted</h3>
+            <p className="text-zinc-600 text-sm max-w-xs mx-auto">Once an institution issues your certificate, it will appear here permanently.</p>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {credentials.map((c) => (
+            <div key={c.id} className="matte-card p-1 group relative overflow-hidden transition-all hover:scale-[1.02]">
+               <div className="p-8 space-y-8 bg-zinc-950 rounded-[inherit] h-full flex flex-col">
+                  <div className="flex items-start justify-between">
+                     <div className="space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-zinc-600">Category</span>
+                        <h3 className="text-xl font-bold capitalize">{c.type}</h3>
+                     </div>
+                     <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-emerald-500">
+                        <ShieldCheck className="w-5 h-5" />
+                     </div>
                   </div>
-                  
-                  <div>
-                    <span className="text-sm font-medium text-gray-700">Issue Date:</span>
-                    <p className="text-gray-900">{selectedCredential.issueDate}</p>
+
+                  <div className="space-y-4 flex-1">
+                     <div className="space-y-1">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-zinc-600">ISSUING ENTITY</span>
+                        <p className="text-sm font-bold truncate">{c.issuerName}</p>
+                     </div>
+                     <div className="flex gap-8">
+                       <div className="space-y-1">
+                          <span className="text-[9px] font-black uppercase tracking-widest text-zinc-600">DATE</span>
+                          <p className="text-xs font-bold">{c.issueDate}</p>
+                       </div>
+                       <div className="space-y-1">
+                          <span className="text-[9px] font-black uppercase tracking-widest text-zinc-600">EXPIRY</span>
+                          <p className="text-xs font-bold text-zinc-400">{c.expiryDate}</p>
+                       </div>
+                     </div>
                   </div>
-                  
-                  <div>
-                    <span className="text-sm font-medium text-gray-700">Expiry Date:</span>
-                    <p className="text-gray-900">{selectedCredential.expiryDate}</p>
+
+                  <div className="pt-6 border-t border-zinc-900 flex items-center gap-2">
+                    <button onClick={() => view(c)} className="matte-button-secondary flex-1 h-10 gap-2 border-zinc-900 bg-zinc-900 hover:bg-zinc-800" title="Source Verification">
+                      <Eye className="w-3.5 h-3.5" />
+                      View
+                    </button>
+                    <button onClick={() => setShowQRCode(c.id)} className="w-10 h-10 flex items-center justify-center rounded-xl bg-zinc-900 border border-zinc-800 hover:text-white transition-colors">
+                      <Share2 className="w-4 h-4" />
+                    </button>
                   </div>
-                  
-                  <div>
-                    <span className="text-sm font-medium text-gray-700">Issuer Address:</span>
-                    <p className="text-xs font-mono bg-gray-50 p-2 rounded break-all">
-                      {selectedCredential.issuer}
-                    </p>
-                  </div>
-                  
-                  <div>
-                    <span className="text-sm font-medium text-gray-700">Credential ID:</span>
-                    <p className="text-xs font-mono bg-gray-50 p-2 rounded break-all">
-                      {selectedCredential.id}
-                    </p>
-                  </div>
-                  
-                  <div>
-                    <span className="text-sm font-medium text-gray-700">Verification URL:</span>
-                    <p className="text-xs text-blue-600 bg-blue-50 p-2 rounded break-all">
-                      {selectedCredential.verificationUrl}
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="border-t pt-4 flex space-x-2">
-                  <button
-                    onClick={() => copyToClipboard(selectedCredential.verificationUrl)}
-                    className="btn-primary flex-1 text-sm"
-                  >
-                    Copy Verification Link
-                  </button>
-                  <button
-                    onClick={() => shareCredential(selectedCredential)}
-                    className="btn-secondary flex-1 text-sm"
-                  >
-                    Share
-                  </button>
-                </div>
-              </div>
+               </div>
             </div>
+          ))}
+        </div>
+      )}
+
+      {showQRCode && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-6">
+          <div className="matte-card max-w-sm w-full p-10 space-y-8 animate-in zoom-in duration-300">
+             <div className="text-center space-y-2">
+               <h3 className="text-xl font-bold text-white">Share Your Achievement</h3>
+               <p className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Public Verification Link</p>
+             </div>
+             <div className="bg-white p-6 rounded-2xl flex justify-center shadow-2xl">
+               <QRCode value={credentials.find(c => c.id === showQRCode)?.verificationUrl || ''} size={180} renderAs="svg" />
+             </div>
+             <div className="flex flex-col gap-3">
+               <button onClick={() => {
+                 navigator.clipboard.writeText(credentials.find(c => c.id === showQRCode)?.verificationUrl || '');
+                 toast.success('Link Secured');
+               }} className="matte-button-primary rounded-xl h-12">Secure Copy</button>
+               <button onClick={() => setShowQRCode(null)} className="matte-button-secondary rounded-xl h-12">Dismiss</button>
+             </div>
           </div>
         </div>
       )}
 
-      {/* QR Code Modal */}
-      {showQRCode && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-6 rounded-lg max-w-sm w-full">
-            <h3 className="text-lg font-semibold mb-4 text-center">Verification QR Code</h3>
-            <div className="flex justify-center mb-4">
-              <QRCode
-                value={credentials.find(c => c.id === showQRCode)?.verificationUrl || ''}
-                size={200}
-                level="M"
-                includeMargin
-              />
+      {viewingDocument && documentUrl && (
+        <div className="fixed inset-0 bg-black/95 z-[300] flex flex-col p-4 md:p-10 animate-in fade-in duration-300">
+          <div className="flex justify-between items-center mb-6 max-w-7xl mx-auto w-full">
+            <div className="flex items-center gap-3">
+              <FileText className="w-6 h-6 text-white" />
+              <div>
+                <h3 className="font-bold text-white">Record Authentication</h3>
+                <p className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Verified by decentralized protocol</p>
+              </div>
             </div>
-            <p className="text-sm text-gray-600 text-center mb-4">
-              Scan this QR code to verify the credential
-            </p>
-            <div className="flex space-x-2">
-              <button
-                onClick={() => copyToClipboard(credentials.find(c => c.id === showQRCode)?.verificationUrl || '')}
-                className="btn-secondary flex-1 text-sm"
-              >
-                Copy Link
-              </button>
-              <button
-                onClick={() => setShowQRCode(null)}
-                className="btn-primary flex-1 text-sm"
-              >
-                Close
-              </button>
-            </div>
+            <button onClick={() => { setViewingDocument(null); setDocumentUrl(null); }} className="w-12 h-12 flex items-center justify-center rounded-full hover:bg-zinc-900 transition-colors text-white">
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+          <div className="flex-1 rounded-2xl overflow-hidden border border-zinc-900 bg-zinc-950 relative max-w-7xl mx-auto w-full">
+            <iframe src={documentUrl} className="w-full h-full border-none" title="Document Viewer" />
           </div>
         </div>
       )}
