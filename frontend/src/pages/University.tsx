@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import toast from 'react-hot-toast';
 import { useWeb3 } from '../contexts/Web3Context';
+import { config } from '../config';
 import QRCode from 'qrcode.react';
 import { 
   Upload, 
@@ -44,6 +45,7 @@ interface IssuedCredential {
   verificationUrl: string;
   fileCID?: string;
   metadataCID?: string;
+  fileType?: string;
 }
 
 const University: React.FC = () => {
@@ -67,6 +69,7 @@ const University: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [viewingDocument, setViewingDocument] = useState<string | null>(null);
   const [documentUrl, setDocumentUrl] = useState<string | null>(null);
+  const [documentType, setDocumentType] = useState<string | null>(null);
 
   const loadIssuedCredentials = useCallback(async () => {
     if (!contract || !account) return;
@@ -78,13 +81,20 @@ const University: React.FC = () => {
       for (const id of credentialIds) {
         try {
           const result = await contract.verifyCredential(id);
+          const credStruct = await contract.credentials(id);
+          
+          // Skip revoked (deleted) credentials
+          if (result.isRevoked) continue;
+
           let fileCID = '';
-          let metadataCID = result.ipfsHash || '';
+          let metadataCID = credStruct.ipfsHash || '';
+          let fileType = '';
           
           try {
             if (metadataCID) {
               const metadata = await retrieveJSONFromIPFS(metadataCID);
               fileCID = metadata.fileCID || '';
+              fileType = metadata.fileType || '';
             }
           } catch (error) {
             console.log('Could not retrieve metadata for credential:', id);
@@ -95,10 +105,11 @@ const University: React.FC = () => {
             student: result.student,
             type: result.credentialType,
             issueDate: new Date(Number(result.issueDate) * 1000).toLocaleDateString(),
-            ipfsHash: result.ipfsHash || '',
-            verificationUrl: generateVerificationUrl(id, await contract.getAddress(), 17000),
+            ipfsHash: credStruct.ipfsHash || '',
+            verificationUrl: generateVerificationUrl(id, await contract.getAddress(), config.chainId),
             fileCID,
             metadataCID,
+            fileType,
           });
         } catch (error) {
           console.error('Error loading credential:', error);
@@ -261,15 +272,25 @@ const University: React.FC = () => {
     try {
       setViewingDocument(credential.id);
       let fileCID = credential.fileCID;
+      let fileType = credential.fileType || null;
+      let targetCID = fileCID;
+      
       if (!fileCID && credential.metadataCID) {
         const metadata = await retrieveJSONFromIPFS(credential.metadataCID);
-        fileCID = metadata.fileCID;
+        fileCID = metadata?.fileCID || '';
+        fileType = metadata?.fileType || null;
+        targetCID = fileCID || credential.metadataCID; // Fallback to showing metadata JSON if no file exists
       }
-      if (fileCID) {
-        setDocumentUrl(getIPFSUrl(fileCID));
+
+      if (targetCID) {
+        setDocumentUrl(getIPFSUrl(targetCID));
+        setDocumentType(fileType || 'application/json');
+      } else {
+        toast.error('No source document linked');
+        setViewingDocument(null);
       }
     } catch (error) {
-      toast.error('Load failed');
+      toast.error('Failed to load document data');
       setViewingDocument(null);
     }
   };
@@ -478,13 +499,13 @@ const University: React.FC = () => {
                <p className="text-xs text-muted-foreground uppercase font-black tracking-widest">Permanent Signature</p>
              </div>
              <div className="bg-white p-6 rounded-2xl flex justify-center shadow-2xl">
-               <QRCode value={issuedCredentials.find(c => c.id === showQRCode)?.verificationUrl || ''} size={180} renderAs="svg" />
+               <QRCode value={issuedCredentials.find(c => c.id === showQRCode)?.id || ''} size={180} renderAs="svg" />
              </div>
              <div className="flex flex-col gap-3">
                <button onClick={() => {
-                 navigator.clipboard.writeText(issuedCredentials.find(c => c.id === showQRCode)?.verificationUrl || '');
-                 toast.success('Link Secured');
-               }} className="matte-button-primary rounded-xl h-12">Copy Protocol Link</button>
+                 navigator.clipboard.writeText(issuedCredentials.find(c => c.id === showQRCode)?.id || '');
+                 toast.success('Hash Copied');
+               }} className="matte-button-primary rounded-xl h-12">Copy Hash</button>
                <button onClick={() => setShowQRCode(null)} className="matte-button-secondary rounded-xl h-12">Close</button>
              </div>
           </div>
@@ -502,12 +523,46 @@ const University: React.FC = () => {
                 <p className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Source Authenticated by IPFS</p>
               </div>
             </div>
-            <button onClick={() => { setViewingDocument(null); setDocumentUrl(null); }} className="w-12 h-12 flex items-center justify-center rounded-full hover:bg-zinc-900 transition-colors">
-              <X className="w-6 h-6" />
-            </button>
+            <div className="flex items-center gap-4">
+              <a 
+                href={documentUrl} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors text-sm font-bold"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Open Source
+              </a>
+              <button onClick={() => { setViewingDocument(null); setDocumentUrl(null); }} className="w-12 h-12 flex items-center justify-center rounded-full hover:bg-zinc-900 transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
           </div>
-          <div className="flex-1 rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-950 relative">
-            <iframe src={documentUrl} className="w-full h-full border-none" title="Document Viewer" />
+          <div className="flex-1 rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-950 relative flex items-center justify-center">
+            {documentUrl.includes('mock') || documentUrl.includes('QmTest') ? (
+              <div className="text-center space-y-4 max-w-md px-6">
+                <AlertCircle className="w-16 h-16 text-zinc-700 mx-auto" />
+                <h3 className="text-xl font-bold text-white">Test Mode Document</h3>
+                <p className="text-zinc-500 text-sm">
+                  This credential was issued in IPFS Test Mode. It uses a mock identifier ({documentUrl.split('/').pop()}) instead of a real uploaded file, so there is no document to display.
+                </p>
+              </div>
+            ) : documentType?.startsWith('image/') ? (
+              <img src={documentUrl} alt="Source Document" className="w-full h-full object-contain" />
+            ) : (
+              <object data={documentUrl} type={documentType || "application/pdf"} className="w-full h-full bg-white">
+                <div className="w-full h-full flex flex-col items-center justify-center space-y-4 bg-zinc-950 p-6">
+                  <FileText className="w-16 h-16 text-zinc-700" />
+                  <h3 className="text-xl font-bold text-white">Preview Blocked</h3>
+                  <p className="text-zinc-500 text-sm text-center max-w-sm">
+                    Your browser security settings prevent embedding decentralized documents directly.
+                  </p>
+                  <a href={documentUrl} target="_blank" rel="noopener noreferrer" className="matte-button-primary px-8 h-12 rounded-xl mt-4">
+                    Open in New Tab
+                  </a>
+                </div>
+              </object>
+            )}
           </div>
         </div>
       )}

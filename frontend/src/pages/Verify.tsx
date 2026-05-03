@@ -16,7 +16,8 @@ import {
   Database,
   FileText,
   Lock,
-  X
+  X,
+  AlertCircle
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { retrieveJSONFromIPFS, getIPFSUrl } from '../utils/ipfs';
@@ -44,13 +45,39 @@ const Verify: React.FC = () => {
   const [manualId, setManualId] = useState('');
   const [viewingDocument, setViewingDocument] = useState(false);
   const [documentUrl, setDocumentUrl] = useState<string | null>(null);
+  const [documentType, setDocumentType] = useState<string | null>(null);
 
   const verify = useCallback(async (id: string) => {
-    if (!contract || !isValidCredentialId(id)) return;
+    if (!id) return;
+    
+    // Clean up the ID in case the user copied extra spaces or the 'HASH: ' prefix
+    let cleanId = id.replace(/^(HASH:\s*)/i, '').trim();
+    
+    // Auto-prepend 0x if they missed it and it's exactly 64 hex characters
+    if (cleanId.length === 64 && /^[a-fA-F0-9]{64}$/.test(cleanId)) {
+      cleanId = '0x' + cleanId;
+    }
+    
+    // Update the input field with the cleaned ID
+    if (cleanId !== id) {
+      setManualId(cleanId);
+    }
+    
+    if (!isValidCredentialId(cleanId)) {
+      toast.error(`Invalid credential ID length (${cleanId.length}). Must be a 66-character hex string (0x...).`);
+      return;
+    }
+
+    if (!contract) {
+      toast.error('Please connect your wallet to verify credentials.');
+      return;
+    }
+
     setLoading(true);
     setDetails(null);
     try {
-      const result = await contract.verifyCredential(id);
+      const result = await contract.verifyCredential(cleanId);
+      const credStruct = await contract.credentials(cleanId);
       let issuerName = 'Authorized Registrar';
       try {
         const issuer = await contract.issuers(result.issuer);
@@ -58,9 +85,9 @@ const Verify: React.FC = () => {
       } catch {}
 
       let metadata = null;
-      if (result.ipfsHash) {
+      if (credStruct.ipfsHash) {
         try {
-          metadata = await retrieveJSONFromIPFS(result.ipfsHash);
+          metadata = await retrieveJSONFromIPFS(credStruct.ipfsHash);
         } catch (e) {
           console.log('Metadata load failed');
         }
@@ -78,7 +105,7 @@ const Verify: React.FC = () => {
           : 'Permanent',
         isValid: result.isValid,
         isRevoked: result.isRevoked,
-        ipfsHash: result.ipfsHash,
+        ipfsHash: credStruct.ipfsHash,
         metadata
       });
       
@@ -100,11 +127,21 @@ const Verify: React.FC = () => {
   }, [searchParams, verify]);
 
   const viewSource = async () => {
-    if (!details?.metadata?.fileCID) {
-      toast.error('No source linked');
+    let targetCID = details?.metadata?.fileCID;
+    let targetType = details?.metadata?.fileType;
+
+    if (!targetCID && details?.ipfsHash) {
+      targetCID = details.ipfsHash;
+      targetType = 'application/json';
+    }
+
+    if (!targetCID) {
+      toast.error(`Error: ipfsHash is '${details?.ipfsHash}' and fileCID is '${details?.metadata?.fileCID}'`);
       return;
     }
-    setDocumentUrl(getIPFSUrl(details.metadata.fileCID));
+
+    setDocumentUrl(getIPFSUrl(targetCID));
+    setDocumentType(targetType || 'application/json');
     setViewingDocument(true);
   };
 
@@ -223,12 +260,46 @@ const Verify: React.FC = () => {
                 <p className="text-[10px] text-zinc-600 uppercase font-black tracking-widest">Verified by IPFS Protocol</p>
               </div>
             </div>
-            <button onClick={() => setViewingDocument(false)} className="w-12 h-12 flex items-center justify-center rounded-full hover:bg-zinc-900 transition-colors">
-              <X className="w-6 h-6" />
-            </button>
+            <div className="flex items-center gap-4">
+              <a 
+                href={documentUrl} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors text-sm font-bold"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Open Source
+              </a>
+              <button onClick={() => setViewingDocument(false)} className="w-12 h-12 flex items-center justify-center rounded-full hover:bg-zinc-900 transition-colors text-white">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
           </div>
-          <div className="flex-1 rounded-[2rem] overflow-hidden border border-zinc-800 bg-zinc-950 relative max-w-7xl mx-auto w-full">
-            <iframe src={documentUrl} className="w-full h-full border-none" title="Source Document" />
+          <div className="flex-1 rounded-[2rem] overflow-hidden border border-zinc-800 bg-zinc-950 relative max-w-7xl mx-auto w-full flex items-center justify-center">
+            {documentUrl.includes('mock') || documentUrl.includes('QmTest') ? (
+              <div className="text-center space-y-4 max-w-md px-6">
+                <AlertCircle className="w-16 h-16 text-zinc-700 mx-auto" />
+                <h3 className="text-xl font-bold text-white">Test Mode Document</h3>
+                <p className="text-zinc-500 text-sm">
+                  This credential was issued in IPFS Test Mode. It uses a mock identifier ({documentUrl.split('/').pop()}) instead of a real uploaded file, so there is no document to display.
+                </p>
+              </div>
+            ) : documentType?.startsWith('image/') ? (
+              <img src={documentUrl} alt="Source Document" className="w-full h-full object-contain" />
+            ) : (
+              <object data={documentUrl} type={documentType || "application/pdf"} className="w-full h-full bg-white">
+                <div className="w-full h-full flex flex-col items-center justify-center space-y-4 bg-zinc-950 p-6">
+                  <FileText className="w-16 h-16 text-zinc-700" />
+                  <h3 className="text-xl font-bold text-white">Preview Blocked</h3>
+                  <p className="text-zinc-500 text-sm text-center max-w-sm">
+                    Your browser security settings prevent embedding decentralized documents directly.
+                  </p>
+                  <a href={documentUrl} target="_blank" rel="noopener noreferrer" className="matte-button-primary px-8 h-12 rounded-xl mt-4">
+                    Open in New Tab
+                  </a>
+                </div>
+              </object>
+            )}
           </div>
         </div>
       )}

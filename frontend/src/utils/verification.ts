@@ -21,8 +21,6 @@ export function generateVerificationUrl(
   const base = baseUrl || window.location.origin;
   const params = new URLSearchParams({
     id: credentialId,
-    contract: contractAddress,
-    chain: chainId.toString(),
   });
   
   return `${base}/verify?${params.toString()}`;
@@ -186,17 +184,10 @@ export function getExplorerUrl(
   txHash: string,
   type: 'tx' | 'address' = 'tx'
 ): string {
-  const explorers: Record<number, string> = {
-    1: 'https://etherscan.io',
-    17000: 'https://holesky.etherscan.io', // Holesky
-    137: 'https://polygonscan.com',
-    80002: 'https://amoy.polygonscan.com', // Polygon Amoy
-    8453: 'https://basescan.org',
-    84531: 'https://goerli.basescan.org', // Base Goerli
-  };
+  const explorers: Record<number, string> = {};
   
-  const baseUrl = explorers[chainId] || explorers[17000]; // Default to Holesky
-  return `${baseUrl}/${type}/${txHash}`;
+  const baseUrl = explorers[chainId] || ''; // Localhost has no explorer
+  return baseUrl ? `${baseUrl}/${type}/${txHash}` : '#';
 }
 
 /**

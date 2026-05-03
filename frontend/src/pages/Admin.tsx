@@ -65,7 +65,7 @@ const Admin: React.FC = () => {
         <div className="w-16 h-16 bg-zinc-900 rounded-full flex items-center justify-center mb-6">
           <ShieldAlert className="w-8 h-8 text-zinc-500" />
         </div>
-        <h2 className="text-2xl font-bold mb-4">Switch to Holesky</h2>
+        <h2 className="text-2xl font-bold mb-4">Switch to Localhost</h2>
         <p className="text-zinc-400 max-w-md">
           This dashboard is only available when MetaMask is connected to chain {config.chainId}. Your wallet is connected, but the contract is not attached on the current network.
         </p>

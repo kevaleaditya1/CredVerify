@@ -59,7 +59,7 @@ const Header: React.FC = () => {
                   onClick={switchNetwork}
                   className="hidden md:flex h-9 px-4 items-center bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded-md text-xs font-bold hover:bg-amber-500/20 transition-all"
                 >
-                  SWITCH TO HOLESKY
+                  SWITCH TO LOCALHOST
                 </button>
               )}
               <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-md">

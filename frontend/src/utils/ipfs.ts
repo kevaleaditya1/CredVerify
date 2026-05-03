@@ -1,19 +1,21 @@
 /**
  * Browser-compatible IPFS utilities for the DACV frontend
- * This uses the browser File API and NFT.Storage for IPFS operations
+ * This uses the browser File API and Pinata for real IPFS operations
  */
 
-// IPFS Storage configuration - supports both NFT.Storage and Web3.Storage
-const NFT_STORAGE_API_KEY = process.env.REACT_APP_NFT_STORAGE_KEY || '';
-const WEB3_STORAGE_API_KEY = process.env.REACT_APP_WEB3_STORAGE_KEY || '';
+// Pinata IPFS Configuration
+const PINATA_JWT = process.env.REACT_APP_PINATA_JWT || '';
+let PINATA_GATEWAY = process.env.REACT_APP_PINATA_GATEWAY || 'https://gateway.pinata.cloud/ipfs/';
+if (!PINATA_GATEWAY.startsWith('http')) {
+  PINATA_GATEWAY = `https://${PINATA_GATEWAY}`;
+}
+if (!PINATA_GATEWAY.endsWith('/')) {
+  PINATA_GATEWAY = `${PINATA_GATEWAY}/`;
+}
 const IPFS_TEST_MODE = process.env.REACT_APP_IPFS_TEST_MODE === 'true';
-const NFT_STORAGE_ENDPOINT = 'https://api.nft.storage';
-const WEB3_STORAGE_ENDPOINT = 'https://api.web3.storage';
 
-// Determine which service to use
-const USE_WEB3_STORAGE = !NFT_STORAGE_API_KEY && WEB3_STORAGE_API_KEY;
-const STORAGE_ENDPOINT = USE_WEB3_STORAGE ? WEB3_STORAGE_ENDPOINT : NFT_STORAGE_ENDPOINT;
-const STORAGE_API_KEY = USE_WEB3_STORAGE ? WEB3_STORAGE_API_KEY : NFT_STORAGE_API_KEY;
+const PINATA_UPLOAD_ENDPOINT = 'https://api.pinata.cloud/pinning/pinFileToIPFS';
+const PINATA_JSON_ENDPOINT = 'https://api.pinata.cloud/pinning/pinJSONToIPFS';
 
 export interface CredentialMetadata {
   name: string;
@@ -42,53 +44,62 @@ export interface IPFSUploadResult {
  * Check if IPFS is configured
  */
 export function isIPFSConfigured(): boolean {
-  // In test mode, always return true
   if (IPFS_TEST_MODE) {
     return true;
   }
-  return !!(NFT_STORAGE_API_KEY || WEB3_STORAGE_API_KEY);
+  return !!PINATA_JWT;
 }
 
 /**
- * Upload a file to IPFS using NFT.Storage or Web3.Storage
+ * Upload a file to IPFS using Pinata
  */
 export async function uploadFileToIPFS(file: File): Promise<string> {
-  // Test mode - return mock CID
   if (IPFS_TEST_MODE) {
     console.log('🧪 IPFS Test Mode: Simulating file upload for:', file.name);
-    // Generate a mock CID based on file name and timestamp
     const mockCID = `QmTest${Date.now()}${file.name.replace(/[^a-zA-Z0-9]/g, '')}`.substring(0, 46);
-    await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate upload delay
-    console.log('🧪 Mock CID generated:', mockCID);
-    return mockCID;
+    
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        try {
+          localStorage.setItem(`ipfs_mock_${mockCID}`, reader.result as string);
+          console.log('🧪 Mock CID generated and saved to local storage:', mockCID);
+          setTimeout(() => resolve(mockCID), 500);
+        } catch (e) {
+          console.warn('LocalStorage full, test mode file might not be viewable');
+          setTimeout(() => resolve(mockCID), 500);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
   }
 
-  if (!STORAGE_API_KEY) {
-    throw new Error(`${USE_WEB3_STORAGE ? 'Web3.Storage' : 'NFT.Storage'} API key not configured. Please set REACT_APP_${USE_WEB3_STORAGE ? 'WEB3' : 'NFT'}_STORAGE_KEY.`);
+  if (!PINATA_JWT) {
+    throw new Error('Pinata JWT not configured. Please set REACT_APP_PINATA_JWT in your .env file.');
   }
 
-  console.log('Uploading file to IPFS:', {
+  console.log('Uploading file to Pinata IPFS:', {
     name: file.name,
     size: file.size,
-    type: file.type,
-    service: USE_WEB3_STORAGE ? 'Web3.Storage' : 'NFT.Storage',
-    endpoint: STORAGE_ENDPOINT,
-    apiKeyConfigured: !!STORAGE_API_KEY
+    type: file.type
   });
 
   try {
     const formData = new FormData();
     formData.append('file', file);
+    
+    // Optional: Add Pinata metadata
+    const pinataMetadata = JSON.stringify({ name: file.name });
+    formData.append('pinataMetadata', pinataMetadata);
 
-    const response = await fetch(`${STORAGE_ENDPOINT}/upload`, {
+    const response = await fetch(PINATA_UPLOAD_ENDPOINT, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${STORAGE_API_KEY}`,
+        'Authorization': `Bearer ${PINATA_JWT}`,
       },
       body: formData,
     });
-
-    console.log(`${USE_WEB3_STORAGE ? 'Web3.Storage' : 'NFT.Storage'} response status:`, response.status);
 
     if (!response.ok) {
       let errorData;
@@ -97,47 +108,59 @@ export async function uploadFileToIPFS(file: File): Promise<string> {
       } catch {
         errorData = { message: 'No error details available' };
       }
-      
-      console.error(`${USE_WEB3_STORAGE ? 'Web3.Storage' : 'NFT.Storage'} error response:`, {
-        status: response.status,
-        statusText: response.statusText,
-        errorData
-      });
-      
       throw new Error(`Upload failed: ${response.status} ${response.statusText} - ${errorData.message || 'Unknown error'}`);
     }
 
     const data = await response.json();
-    console.log(`${USE_WEB3_STORAGE ? 'Web3.Storage' : 'NFT.Storage'} success response:`, data);
+    console.log(`Pinata success response:`, data);
     
-    return data.value.cid;
+    return data.IpfsHash;
   } catch (error) {
     console.error('Error uploading file to IPFS:', error);
-    
     if (error instanceof TypeError && error.message.includes('fetch')) {
       throw new Error('Network error: Please check your internet connection and try again.');
     }
-    
     throw new Error(`Failed to upload file to IPFS: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
 /**
- * Upload credential metadata to IPFS
+ * Upload credential metadata to IPFS using Pinata JSON endpoint
  */
 export async function uploadCredentialMetadata(metadata: CredentialMetadata): Promise<string> {
-  try {
-    // Create a JSON blob from metadata
-    const jsonBlob = new Blob([JSON.stringify(metadata, null, 2)], {
-      type: 'application/json',
-    });
-    
-    // Create a File object from the blob
-    const metadataFile = new File([jsonBlob], 'credential-metadata.json', {
-      type: 'application/json',
-    });
-    
+  if (IPFS_TEST_MODE) {
+    // If test mode, just use the file mock approach
+    const jsonBlob = new Blob([JSON.stringify(metadata, null, 2)], { type: 'application/json' });
+    const metadataFile = new File([jsonBlob], 'credential-metadata.json', { type: 'application/json' });
     return await uploadFileToIPFS(metadataFile);
+  }
+
+  if (!PINATA_JWT) {
+    throw new Error('Pinata JWT not configured.');
+  }
+
+  try {
+    const data = {
+      pinataOptions: { cidVersion: 1 },
+      pinataMetadata: { name: `DACV_Metadata_${metadata.student.slice(0,6)}` },
+      pinataContent: metadata
+    };
+
+    const response = await fetch(PINATA_JSON_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${PINATA_JWT}`
+      },
+      body: JSON.stringify(data)
+    });
+
+    if (!response.ok) {
+      throw new Error(`Upload failed: ${response.status}`);
+    }
+
+    const resData = await response.json();
+    return resData.IpfsHash;
   } catch (error) {
     console.error('Error uploading metadata to IPFS:', error);
     throw new Error('Failed to upload metadata to IPFS');
@@ -152,10 +175,8 @@ export async function uploadCredential(
   metadata: CredentialMetadata
 ): Promise<IPFSUploadResult> {
   try {
-    // First upload the file to get its CID
     const fileCID = await uploadFileToIPFS(credentialFile);
     
-    // Add fileCID to metadata before uploading metadata
     const metadataWithFileCID = {
       ...metadata,
       fileCID: fileCID,
@@ -164,13 +185,9 @@ export async function uploadCredential(
       fileType: credentialFile.type
     };
     
-    // Then upload the enhanced metadata
     const metadataCID = await uploadCredentialMetadata(metadataWithFileCID as CredentialMetadata);
 
-    return {
-      fileCID,
-      metadataCID,
-    };
+    return { fileCID, metadataCID };
   } catch (error) {
     console.error('Error uploading credential:', error);
     throw new Error('Failed to upload credential to IPFS');
@@ -183,17 +200,36 @@ export async function uploadCredential(
 export async function retrieveFromIPFS(cid: string): Promise<string> {
   if (IPFS_TEST_MODE) {
     console.log('🧪 IPFS Test Mode: Simulating file retrieval for CID:', cid);
-    // Return mock content based on CID
-    await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 500));
     return `Mock content for CID: ${cid}`;
   }
   
   try {
-    const response = await fetch(`https://nftstorage.link/ipfs/${cid}`);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    const userGateway = PINATA_GATEWAY;
+    
+    // We use fallback gateways because Pinata's public gateway often blocks CORS (fetch) from localhost
+    const gateways = [
+      userGateway,
+      'https://ipfs.io/ipfs/',
+      'https://dweb.link/ipfs/',
+      'https://cloudflare-ipfs.com/ipfs/'
+    ];
+
+    let lastError = null;
+    
+    for (const gateway of gateways) {
+      try {
+        const response = await fetch(`${gateway}${cid}`);
+        if (response.ok) {
+          return await response.text();
+        }
+      } catch (e) {
+        lastError = e;
+        console.warn(`Gateway ${gateway} failed for ${cid}, trying next...`);
+      }
     }
-    return await response.text();
+    
+    throw lastError || new Error('All IPFS gateways failed');
   } catch (error) {
     console.error('Error retrieving from IPFS:', error);
     throw new Error('Failed to retrieve from IPFS');
@@ -206,8 +242,21 @@ export async function retrieveFromIPFS(cid: string): Promise<string> {
 export async function retrieveJSONFromIPFS(cid: string): Promise<any> {
   if (IPFS_TEST_MODE) {
     console.log('🧪 IPFS Test Mode: Simulating JSON retrieval for CID:', cid);
-    await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
-    // Return mock credential metadata
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    const dataUrl = localStorage.getItem(`ipfs_mock_${cid}`);
+    if (dataUrl) {
+      const base64 = dataUrl.split(',')[1];
+      if (base64) {
+        try {
+          const text = atob(base64);
+          return JSON.parse(text);
+        } catch (e) {
+          console.error("Failed to parse mock JSON from localStorage", e);
+        }
+      }
+    }
+    
     return {
       name: "Mock Credential",
       description: "Test credential for demonstration",
@@ -238,29 +287,23 @@ export async function retrieveJSONFromIPFS(cid: string): Promise<any> {
  * Get IPFS gateway URL
  */
 export function getIPFSUrl(cid: string): string {
-  return `https://nftstorage.link/ipfs/${cid}`;
+  if (IPFS_TEST_MODE && cid.startsWith('QmTest')) {
+    const dataUrl = localStorage.getItem(`ipfs_mock_${cid}`);
+    if (dataUrl) return dataUrl;
+  }
+  return `${PINATA_GATEWAY}${cid}`;
 }
 
-/**
- * Get downloadable URL for a credential file
- */
 export function getCredentialDownloadUrl(cid: string, filename?: string): string {
   const baseUrl = getIPFSUrl(cid);
   return filename ? `${baseUrl}?filename=${encodeURIComponent(filename)}` : baseUrl;
 }
 
-/**
- * Validate IPFS CID format
- */
 export function isValidCID(cid: string): boolean {
-  // CIDv0 (Qm...) or CIDv1 patterns
   const cidRegex = /^(Qm[1-9A-HJ-NP-Za-km-z]{44}|b[A-Za-z2-7]{58}|z[1-9A-HJ-NP-Za-km-z]{48})$/;
   return cidRegex.test(cid);
 }
 
-/**
- * Create credential metadata object
- */
 export function createCredentialMetadata(
   studentName: string,
   credentialType: string,
@@ -284,9 +327,6 @@ export function createCredentialMetadata(
   };
 }
 
-/**
- * Get IPFS configuration status
- */
 export function getIPFSStatus(): {
   configured: boolean;
   message: string;
@@ -296,46 +336,35 @@ export function getIPFSStatus(): {
   if (IPFS_TEST_MODE) {
     return {
       configured: true,
-      endpoint: 'Test Mode',
-      keyPreview: 'Test Mode (No API Key Required)',
-      message: 'IPFS is running in test mode - files will be mocked'
+      endpoint: 'Local Test Storage',
+      keyPreview: 'Test Mode',
+      message: 'IPFS is running in local browser storage mode'
     };
   }
   
   const configured = isIPFSConfigured();
   return {
     configured,
-    endpoint: STORAGE_ENDPOINT,
-    keyPreview: STORAGE_API_KEY ? `${STORAGE_API_KEY.substring(0, 10)}...` : 'Not set',
+    endpoint: 'Pinata Cloud',
+    keyPreview: PINATA_JWT ? `${PINATA_JWT.substring(0, 15)}...` : 'Not set',
     message: configured 
-      ? `IPFS is properly configured with ${USE_WEB3_STORAGE ? 'Web3.Storage' : 'NFT.Storage'}`
-      : `IPFS not configured. Please set REACT_APP_${USE_WEB3_STORAGE ? 'WEB3' : 'NFT'}_STORAGE_KEY in your environment.`
+      ? 'IPFS is properly configured with Pinata'
+      : 'IPFS not configured. Please set REACT_APP_PINATA_JWT in your environment.'
   };
 }
 
-/**
- * Test IPFS connection
- */
 export async function testIPFSConnection(): Promise<boolean> {
-  if (IPFS_TEST_MODE) {
-    console.log('🧪 IPFS Test Mode: Connection test successful (mocked)');
-    return true;
-  }
-  
-  if (!STORAGE_API_KEY) {
-    console.error(`${USE_WEB3_STORAGE ? 'Web3.Storage' : 'NFT.Storage'} API key not configured`);
-    return false;
-  }
+  if (IPFS_TEST_MODE) return true;
+  if (!PINATA_JWT) return false;
 
   try {
-    // Create a small test file
-    const testData = new Blob(['DACV IPFS Test'], { type: 'text/plain' });
-    const testFile = new File([testData], 'test.txt', { type: 'text/plain' });
-    
-    console.log('Testing IPFS connection...');
-    const cid = await uploadFileToIPFS(testFile);
-    console.log('IPFS test successful, CID:', cid);
-    return true;
+    // Pinata has an auth test endpoint
+    const response = await fetch('https://api.pinata.cloud/data/testAuthentication', {
+      headers: {
+        'Authorization': `Bearer ${PINATA_JWT}`
+      }
+    });
+    return response.ok;
   } catch (error) {
     console.error('IPFS test failed:', error);
     return false;

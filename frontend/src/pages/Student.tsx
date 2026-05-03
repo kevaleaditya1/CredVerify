@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { useWeb3 } from '../contexts/Web3Context';
+import { config } from '../config';
 import QRCode from 'qrcode.react';
 import { 
   UserCircle, 
@@ -17,7 +18,8 @@ import {
   ExternalLink,
   ChevronRight,
   Database,
-  X
+  X,
+  AlertCircle
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -38,6 +40,7 @@ interface Credential {
   ipfsHash: string;
   verificationUrl: string;
   fileCID?: string;
+  fileType?: string;
   metadata?: any;
 }
 
@@ -48,6 +51,7 @@ const Student: React.FC = () => {
   const [showQRCode, setShowQRCode] = useState<string | null>(null);
   const [viewingDocument, setViewingDocument] = useState<string | null>(null);
   const [documentUrl, setDocumentUrl] = useState<string | null>(null);
+  const [documentType, setDocumentType] = useState<string | null>(null);
 
   const loadCredentials = useCallback(async () => {
     if (!contract || !account) return;
@@ -60,6 +64,11 @@ const Student: React.FC = () => {
       for (const id of credentialIds) {
         try {
           const result = await contract.verifyCredential(id);
+          const credStruct = await contract.credentials(id);
+          
+          // Skip revoked (deleted) credentials
+          if (result.isRevoked) continue;
+          
           let issuerName = 'Authorized Entity';
           try {
             const issuer = await contract.issuers(result.issuer);
@@ -67,11 +76,13 @@ const Student: React.FC = () => {
           } catch {}
 
           let fileCID = '';
+          let fileType = '';
           let metadata = null;
-          if (result.ipfsHash) {
+          if (credStruct.ipfsHash) {
             try {
-              metadata = await retrieveJSONFromIPFS(result.ipfsHash);
+              metadata = await retrieveJSONFromIPFS(credStruct.ipfsHash);
               fileCID = metadata.fileCID || '';
+              fileType = metadata.fileType || '';
             } catch (e) {
               console.log('Metadata sync failed for', id);
             }
@@ -86,9 +97,10 @@ const Student: React.FC = () => {
             expiryDate: result.expiryDate > 0 
               ? new Date(Number(result.expiryDate) * 1000).toLocaleDateString()
               : 'Permanent',
-            ipfsHash: result.ipfsHash,
-            verificationUrl: generateVerificationUrl(id, await contract.getAddress(), 17000),
+            ipfsHash: credStruct.ipfsHash,
+            verificationUrl: generateVerificationUrl(id, await contract.getAddress(), config.chainId),
             fileCID,
+            fileType,
             metadata,
           });
         } catch (error) {
@@ -113,15 +125,25 @@ const Student: React.FC = () => {
     try {
       setViewingDocument(c.id);
       let fileCID = c.fileCID;
+      let fileType = c.fileType || c.metadata?.fileType || null;
+      let targetCID = fileCID;
+      
       if (!fileCID && c.ipfsHash) {
         const metadata = await retrieveJSONFromIPFS(c.ipfsHash);
-        fileCID = metadata.fileCID;
+        fileCID = metadata?.fileCID || '';
+        fileType = metadata?.fileType || null;
+        targetCID = fileCID || c.ipfsHash; // Fallback to showing metadata JSON
       }
-      if (fileCID) {
-        setDocumentUrl(getIPFSUrl(fileCID));
+
+      if (targetCID) {
+        setDocumentUrl(getIPFSUrl(targetCID));
+        setDocumentType(fileType || 'application/json');
+      } else {
+        toast.error('No source document linked');
+        setViewingDocument(null);
       }
     } catch (error) {
-      toast.error('Source link broken');
+      toast.error('Failed to load document data');
       setViewingDocument(null);
     }
   };
@@ -217,13 +239,13 @@ const Student: React.FC = () => {
                <p className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Public Verification Link</p>
              </div>
              <div className="bg-white p-6 rounded-2xl flex justify-center shadow-2xl">
-               <QRCode value={credentials.find(c => c.id === showQRCode)?.verificationUrl || ''} size={180} renderAs="svg" />
+               <QRCode value={credentials.find(c => c.id === showQRCode)?.id || ''} size={180} renderAs="svg" />
              </div>
              <div className="flex flex-col gap-3">
                <button onClick={() => {
-                 navigator.clipboard.writeText(credentials.find(c => c.id === showQRCode)?.verificationUrl || '');
-                 toast.success('Link Secured');
-               }} className="matte-button-primary rounded-xl h-12">Secure Copy</button>
+                 navigator.clipboard.writeText(credentials.find(c => c.id === showQRCode)?.id || '');
+                 toast.success('Hash Copied');
+               }} className="matte-button-primary rounded-xl h-12">Copy Hash</button>
                <button onClick={() => setShowQRCode(null)} className="matte-button-secondary rounded-xl h-12">Dismiss</button>
              </div>
           </div>
@@ -240,12 +262,46 @@ const Student: React.FC = () => {
                 <p className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Verified by decentralized protocol</p>
               </div>
             </div>
-            <button onClick={() => { setViewingDocument(null); setDocumentUrl(null); }} className="w-12 h-12 flex items-center justify-center rounded-full hover:bg-zinc-900 transition-colors text-white">
-              <X className="w-6 h-6" />
-            </button>
+            <div className="flex items-center gap-4">
+              <a 
+                href={documentUrl} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors text-sm font-bold"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Open Source
+              </a>
+              <button onClick={() => { setViewingDocument(null); setDocumentUrl(null); }} className="w-12 h-12 flex items-center justify-center rounded-full hover:bg-zinc-900 transition-colors text-white">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
           </div>
-          <div className="flex-1 rounded-2xl overflow-hidden border border-zinc-900 bg-zinc-950 relative max-w-7xl mx-auto w-full">
-            <iframe src={documentUrl} className="w-full h-full border-none" title="Document Viewer" />
+          <div className="flex-1 rounded-2xl overflow-hidden border border-zinc-900 bg-zinc-950 relative max-w-7xl mx-auto w-full flex items-center justify-center">
+            {documentUrl.includes('mock') || documentUrl.includes('QmTest') ? (
+              <div className="text-center space-y-4 max-w-md px-6">
+                <AlertCircle className="w-16 h-16 text-zinc-700 mx-auto" />
+                <h3 className="text-xl font-bold text-white">Test Mode Document</h3>
+                <p className="text-zinc-500 text-sm">
+                  This credential was issued in IPFS Test Mode. It uses a mock identifier ({documentUrl.split('/').pop()}) instead of a real uploaded file, so there is no document to display.
+                </p>
+              </div>
+            ) : documentType?.startsWith('image/') ? (
+              <img src={documentUrl} alt="Source Document" className="w-full h-full object-contain" />
+            ) : (
+              <object data={documentUrl} type={documentType || "application/pdf"} className="w-full h-full bg-white">
+                <div className="w-full h-full flex flex-col items-center justify-center space-y-4 bg-zinc-950 p-6">
+                  <FileText className="w-16 h-16 text-zinc-700" />
+                  <h3 className="text-xl font-bold text-white">Preview Blocked</h3>
+                  <p className="text-zinc-500 text-sm text-center max-w-sm">
+                    Your browser security settings prevent embedding decentralized documents directly.
+                  </p>
+                  <a href={documentUrl} target="_blank" rel="noopener noreferrer" className="matte-button-primary px-8 h-12 rounded-xl mt-4">
+                    Open in New Tab
+                  </a>
+                </div>
+              </object>
+            )}
           </div>
         </div>
       )}

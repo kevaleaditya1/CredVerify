@@ -17,20 +17,7 @@ const config: HardhatUserConfig = {
     hardhat: {
       chainId: 31338,
     },
-    holesky: {
-      url: process.env.HOLESKY_RPC_URL || "https://ethereum-holesky.publicnode.com",
-      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-      gasPrice: 10000000000, // 10 gwei (usually cheaper)
-      chainId: 17000,
-    },
-    polygon_amoy: {
-      url: "https://rpc-amoy.polygon.technology/",
-      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-    },
-    base_goerli: {
-      url: "https://goerli.base.org",
-      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-    },
+
     localhost: {
       url: "http://127.0.0.1:8545",
       chainId: 31338,
@@ -38,7 +25,7 @@ const config: HardhatUserConfig = {
   },
   etherscan: {
     apiKey: {
-      holesky: process.env.ETHERSCAN_API_KEY || "",
+      // Add api keys here
     },
   },
   gasReporter: {

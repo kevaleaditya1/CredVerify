@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { ethers, BrowserProvider, Contract } from 'ethers';
 import toast from 'react-hot-toast';
-import { config } from '../config';
+import { config, SUPPORTED_CHAINS } from '../config';
 
 // Contract ABI (simplified - you'll need to import the full ABI from your compiled contract)
 const CONTRACT_ABI = [
@@ -11,6 +11,7 @@ const CONTRACT_ABI = [
   "function revokeCredential(bytes32 _credentialId) external",
   "function getStudentCredentials(address _student) external view returns (bytes32[] memory)",
   "function getIssuerCredentials(address _issuer) external view returns (bytes32[] memory)",
+  "function credentials(bytes32) external view returns (bytes32 credentialHash, string memory ipfsHash, address issuer, address student, string memory credentialType, uint256 issueDate, uint256 expiryDate, bool isRevoked, bool exists)",
   "function authorizedIssuers(address) external view returns (bool)",
   "function issuers(address) external view returns (string memory name, string memory country, bool isActive, uint256 registrationDate, uint256 credentialsIssued)",
   "function owner() external view returns (address)",
@@ -55,7 +56,7 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
   const [chainId, setChainId] = useState<number | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isOwner, setIsOwner] = useState<boolean | null>(null);
-  const targetNetwork = config.networks.holesky;
+  const targetNetwork = config.networks.localhost;
 
   // Check if current user is owner
   useEffect(() => {
@@ -94,14 +95,14 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
       setChainId(Number(network.chainId));
       setIsConnected(true);
 
-      // Only attach the contract when MetaMask is on the Holesky deployment network.
-      if (CONTRACT_ADDRESS && Number(network.chainId) === config.chainId) {
+      // Only attach the contract when MetaMask is on a supported network.
+      if (CONTRACT_ADDRESS && SUPPORTED_CHAINS.includes(Number(network.chainId))) {
         const contract = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
         setContract(contract);
       } else {
         setContract(null);
-        if (Number(network.chainId) !== config.chainId) {
-          toast.error(`Connected to chain ${Number(network.chainId)}. Switch MetaMask to Holesky to use the deployed app.`);
+        if (!SUPPORTED_CHAINS.includes(Number(network.chainId))) {
+          toast.error(`Connected to chain ${Number(network.chainId)}. Switch MetaMask to Localhost to use the deployed app.`);
         }
       }
 
