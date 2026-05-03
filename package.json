@@ -4,15 +4,17 @@
   "description": "Decentralized Academic Credential Verification System",
   "main": "index.js",
   "scripts": {
+    "transfer:owner": "npx hardhat run scripts/transfer-ownership.ts --network holesky",
     "compile": "hardhat compile",
     "test": "hardhat test",
-    "deploy:sepolia": "hardhat run scripts/deploy.ts --network sepolia",
     "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
-    "setup": "hardhat run scripts/setup.ts --network sepolia",
+    "setup": "hardhat run scripts/setup.ts --network holesky",
+    "remove:issuer": "hardhat run scripts/remove-issuer.ts",
     "node": "hardhat node",
     "dev": "cd frontend && npm run dev",
     "build": "cd frontend && npm run build",
-    "install-frontend": "cd frontend && npm install"
+    "install-frontend": "cd frontend && npm install",
+    "grant:issuer": "npx hardhat run scripts/grant-issuer.ts --network holesky"
   },
   "keywords": [
     "blockchain",

@@ -47,8 +47,9 @@ interface IssuedCredential {
 }
 
 const University: React.FC = () => {
-  const { account, contract, isConnected } = useWeb3();
+  const { account, contract, isConnected, isOwner } = useWeb3();
   const [isAuthorizedIssuer, setIsAuthorizedIssuer] = useState(false);
+  const [accessCheckComplete, setAccessCheckComplete] = useState(false);
   const [issuerInfo, setIssuerInfo] = useState<any>(null);
   const [issuingCredential, setIssuingCredential] = useState(false);
   const [issuedCredentials, setIssuedCredentials] = useState<IssuedCredential[]>([]);
@@ -112,6 +113,23 @@ const University: React.FC = () => {
 
   useEffect(() => {
     const checkIssuerStatus = async () => {
+      setAccessCheckComplete(false);
+
+      if (isOwner) {
+        setIsAuthorizedIssuer(true);
+        if (contract && account) {
+          try {
+            const issuer = await contract.issuers(account);
+            setIssuerInfo(issuer);
+            loadIssuedCredentials();
+          } catch (error) {
+            console.error('Error loading owner issuer info:', error);
+          }
+        }
+        setAccessCheckComplete(true);
+        return;
+      }
+
       if (contract && account) {
         try {
           const isAuthorized = await contract.authorizedIssuers(account);
@@ -124,14 +142,17 @@ const University: React.FC = () => {
           }
         } catch (error) {
           console.error('Error checking issuer status:', error);
+          setIsAuthorizedIssuer(false);
         }
       }
+
+      setAccessCheckComplete(true);
     };
 
     const ipfsConfig = getIPFSStatus();
     setIpfsStatus(ipfsConfig);
     checkIssuerStatus();
-  }, [contract, account, loadIssuedCredentials]);
+  }, [contract, account, isOwner, loadIssuedCredentials]);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
@@ -259,6 +280,18 @@ const University: React.FC = () => {
         <Database className="w-16 h-16 text-zinc-800" />
         <h1 className="text-4xl font-bold tracking-tighter">Registrar Access</h1>
         <p className="text-muted-foreground">Authenticate your administrative wallet to continue.</p>
+      </div>
+    );
+  }
+
+  if (!accessCheckComplete) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-6 text-center">
+        <Database className="w-16 h-16 text-zinc-800 animate-pulse" />
+        <h1 className="text-4xl font-bold tracking-tighter">Verifying Access</h1>
+        <p className="text-muted-foreground max-w-md">
+          Checking whether this wallet is the contract owner or an authorized registrar.
+        </p>
       </div>
     );
   }

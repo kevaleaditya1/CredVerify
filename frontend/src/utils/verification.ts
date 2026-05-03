@@ -189,7 +189,6 @@ export function getExplorerUrl(
   const explorers: Record<number, string> = {
     1: 'https://etherscan.io',
     17000: 'https://holesky.etherscan.io', // Holesky
-    11155111: 'https://sepolia.etherscan.io', // Sepolia
     137: 'https://polygonscan.com',
     80002: 'https://amoy.polygonscan.com', // Polygon Amoy
     8453: 'https://basescan.org',

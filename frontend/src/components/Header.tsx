@@ -6,7 +6,7 @@ import { config } from '../config';
 import { cn } from '../lib/utils';
 
 const Header: React.FC = () => {
-  const { account, isConnected, connectWallet, disconnectWallet, chainId, switchNetwork } = useWeb3();
+  const { account, isConnected, connectWallet, disconnectWallet, chainId, switchNetwork, isOwner } = useWeb3();
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -21,6 +21,10 @@ const Header: React.FC = () => {
     { path: '/student', label: 'Student' },
     { path: '/verify', label: 'Verify' },
   ];
+
+  if (isOwner) {
+    navItems.push({ path: '/admin', label: 'Admin' });
+  }
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-zinc-800 bg-black/95 backdrop-blur supports-[backdrop-filter]:bg-black/60">
@@ -55,7 +59,7 @@ const Header: React.FC = () => {
                   onClick={switchNetwork}
                   className="hidden md:flex h-9 px-4 items-center bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded-md text-xs font-bold hover:bg-amber-500/20 transition-all"
                 >
-                  WRONG NETWORK
+                  SWITCH TO HOLESKY
                 </button>
               )}
               <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-md">

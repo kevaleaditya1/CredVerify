@@ -8,6 +8,7 @@ import University from './pages/University';
 import Student from './pages/Student';
 import Employer from './pages/Employer';
 import Verify from './pages/Verify';
+import Admin from './pages/Admin';
 
 function App() {
   return (
@@ -30,6 +31,7 @@ function App() {
               <Route path="/student" element={<Student />} />
               <Route path="/employer" element={<Employer />} />
               <Route path="/verify" element={<Verify />} />
+              <Route path="/admin" element={<Admin />} />
             </Routes>
           </main>
           <Footer />

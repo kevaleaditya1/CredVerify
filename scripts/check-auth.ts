@@ -1,8 +1,14 @@
 import { ethers } from "hardhat";
 
 async function main() {
-    const contractAddress = "0x3753cfB00dd01D35A36284A909EcBb73a06Fcc7b";
-    const userAddress = "0x19d6f54282377c031e2f19d2e4699c1541de760e";
+    const contractAddress = process.env.CONTRACT_ADDRESS || process.argv[2];
+    const userAddress = process.env.USER_ADDRESS || process.argv[3];
+
+    if (!contractAddress || !userAddress) {
+        throw new Error(
+            "Missing contract or user address. Set CONTRACT_ADDRESS and USER_ADDRESS, or pass them as CLI args."
+        );
+    }
 
     console.log(`Checking authorization for ${userAddress} on contract ${contractAddress}...`);
 

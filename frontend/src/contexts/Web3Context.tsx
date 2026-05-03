@@ -13,6 +13,7 @@ const CONTRACT_ABI = [
   "function getIssuerCredentials(address _issuer) external view returns (bytes32[] memory)",
   "function authorizedIssuers(address) external view returns (bool)",
   "function issuers(address) external view returns (string memory name, string memory country, bool isActive, uint256 registrationDate, uint256 credentialsIssued)",
+  "function owner() external view returns (address)",
   "event CredentialIssued(bytes32 indexed credentialId, address indexed issuer, address indexed student, string credentialType, string ipfsHash)",
   "event CredentialRevoked(bytes32 indexed credentialId, address indexed issuer)"
 ];
@@ -27,6 +28,7 @@ interface Web3ContextType {
   connectWallet: () => Promise<void>;
   disconnectWallet: () => void;
   switchNetwork: () => Promise<void>;
+  isOwner: boolean | null;
 }
 
 const Web3Context = createContext<Web3ContextType | null>(null);
@@ -52,6 +54,27 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
   const [contract, setContract] = useState<Contract | null>(null);
   const [chainId, setChainId] = useState<number | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [isOwner, setIsOwner] = useState<boolean | null>(null);
+  const targetNetwork = config.networks.holesky;
+
+  // Check if current user is owner
+  useEffect(() => {
+    const checkOwner = async () => {
+      if (!contract || !account) {
+        setIsOwner(null);
+        return;
+      }
+
+      try {
+        const ownerAddress = await contract.owner();
+        setIsOwner(ownerAddress.toLowerCase() === account.toLowerCase());
+      } catch (error) {
+        console.error("Failed to fetch owner:", error);
+        setIsOwner(null);
+      }
+    };
+    checkOwner();
+  }, [contract, account]);
 
   const connectWallet = async () => {
     try {
@@ -71,10 +94,15 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
       setChainId(Number(network.chainId));
       setIsConnected(true);
 
-      // Initialize contract if address is available
-      if (CONTRACT_ADDRESS) {
+      // Only attach the contract when MetaMask is on the Holesky deployment network.
+      if (CONTRACT_ADDRESS && Number(network.chainId) === config.chainId) {
         const contract = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
         setContract(contract);
+      } else {
+        setContract(null);
+        if (Number(network.chainId) !== config.chainId) {
+          toast.error(`Connected to chain ${Number(network.chainId)}. Switch MetaMask to Holesky to use the deployed app.`);
+        }
       }
 
       toast.success('Wallet connected successfully');
@@ -98,11 +126,6 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
     try {
       if (!window.ethereum) return;
       
-      // Find the currently configured network from config
-      const targetNetworkKey = Object.keys(config.networks).find(
-        key => config.networks[key as keyof typeof config.networks].chainId === config.chainId
-      ) as keyof typeof config.networks;
-      
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: `0x${config.chainId.toString(16)}` }],
@@ -110,25 +133,21 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
     } catch (error: any) {
       if (error.code === 4902) {
         // Chain not added to MetaMask
-        const targetNetKey = Object.keys(config.networks).find(
-          key => config.networks[key as keyof typeof config.networks].chainId === config.chainId
-        ) as keyof typeof config.networks;
-        const fallbackActiveNetwork = targetNetKey ? config.networks[targetNetKey] : config.networks.holesky;
         
         try {
           const addParams: any = {
             chainId: `0x${config.chainId.toString(16)}`,
-            chainName: fallbackActiveNetwork.name,
+            chainName: targetNetwork.name,
             nativeCurrency: {
               name: 'ETH',
               symbol: 'ETH',
               decimals: 18,
             },
-            rpcUrls: fallbackActiveNetwork.rpcUrls,
+            rpcUrls: targetNetwork.rpcUrls,
           };
-          
-          if (fallbackActiveNetwork.blockExplorer) {
-            addParams.blockExplorerUrls = [fallbackActiveNetwork.blockExplorer];
+
+          if (targetNetwork.blockExplorer) {
+            addParams.blockExplorerUrls = [targetNetwork.blockExplorer];
           }
 
           await window.ethereum.request({
@@ -137,7 +156,7 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
           });
         } catch (addError: any) {
           console.error("MetaMask Add Error:", addError);
-          toast.error(addError?.message || `Failed to add ${fallbackActiveNetwork.name}`);
+          toast.error(addError?.message || `Failed to add ${targetNetwork.name}`);
         }
       } else {
         console.error("MetaMask Switch Error:", error);
@@ -200,6 +219,7 @@ export const Web3Provider: React.FC<Web3ProviderProps> = ({ children }) => {
     connectWallet,
     disconnectWallet,
     switchNetwork,
+    isOwner,
   };
 
   return <Web3Context.Provider value={value}>{children}</Web3Context.Provider>;

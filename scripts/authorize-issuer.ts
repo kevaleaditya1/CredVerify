@@ -1,12 +1,18 @@
 import { ethers } from "hardhat";
 
 async function main() {
-    const contractAddress = "0x3753cfB00dd01D35A36284A909EcBb73a06Fcc7b";
-    const newIssuerAddress = "0x19d6f54282377c031e2f19d2e4699c1541de760e";
-    const issuerName = "University of Holesky";
-    const issuerCountry = "Global";
+    const contractAddress = process.env.CONTRACT_ADDRESS || process.argv[2];
+    const newIssuerAddress = process.env.ISSUER_ADDRESS || process.argv[3];
+    const issuerName = process.env.ISSUER_NAME || process.argv[4] || "Demo University";
+    const issuerCountry = process.env.ISSUER_COUNTRY || process.argv[5] || "Global";
 
-    const rpcUrl = process.env.HOLESKY_RPC_URL || "https://ethereum-holesky.publicnode.com";
+    if (!contractAddress || !newIssuerAddress) {
+        throw new Error(
+            "Missing contract or issuer address. Set CONTRACT_ADDRESS and ISSUER_ADDRESS, or pass them as CLI args."
+        );
+    }
+
+    const rpcUrl = process.env.HOLESKY_RPC_URL || "https://1rpc.io/holesky";
 
     console.log(`Preparing to authorize ${newIssuerAddress} on contract ${contractAddress}...`);
 

@@ -5,8 +5,7 @@ async function main() {
   const [deployer] = await ethers.getSigners();
   console.log("Adding issuer with account:", deployer.address);
 
-  // IMPORTANT: Replace this with your actual deployed contract address
-  const contractAddress = process.env.CONTRACT_ADDRESS || "0x3753cfB00dd01D35A36284A909EcBb73a06Fcc7b";
+  const contractAddress = process.env.CONTRACT_ADDRESS || process.argv[2];
   
   if (!contractAddress) {
     console.error("❌ Please set CONTRACT_ADDRESS environment variable");
@@ -20,9 +19,14 @@ async function main() {
   const dacvRegistry = DACVRegistry.attach(contractAddress);
 
   // University details
-  const universityAddress = "0x8626f6940E2eb28930eFb4CeF49B2d1F2C9C1199"; // User defined address
-  const universityName = "AGPIT";
-  const universityCountry = "India";
+  const universityAddress = process.env.UNIVERSITY_ADDRESS || process.argv[3];
+  const universityName = process.env.UNIVERSITY_NAME || process.argv[4] || "AGPIT";
+  const universityCountry = process.env.UNIVERSITY_COUNTRY || process.argv[5] || "India";
+
+  if (!universityAddress) {
+    console.error("❌ Please set UNIVERSITY_ADDRESS environment variable");
+    process.exit(1);
+  }
 
   console.log("Adding university issuer...");
   console.log("University Address:", universityAddress);
