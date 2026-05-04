@@ -12,7 +12,7 @@
     "remove:issuer": "hardhat run scripts/remove-issuer.ts",
     "node": "hardhat node",
     "dev": "cd frontend && npm run dev",
-    "build": "cd frontend && npm run build",
+    "build": "cd frontend && npm install && npm run build",
     "install-frontend": "cd frontend && npm install",
     "grant:issuer": "npx hardhat run scripts/grant-issuer.ts --network holesky"
   },
