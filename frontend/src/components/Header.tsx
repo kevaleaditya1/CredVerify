@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useWeb3 } from '../contexts/Web3Context';
-import { Menu, X, Wallet, LogOut, Shield } from 'lucide-react';
+import { Menu, X, LogOut, Shield } from 'lucide-react';
 import { config } from '../config';
 import { cn } from '../lib/utils';
 

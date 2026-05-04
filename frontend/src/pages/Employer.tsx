@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import toast from 'react-hot-toast';
 import { useWeb3 } from '../contexts/Web3Context';
-import { Search, ScanLine, History, ShieldCheck, ShieldAlert, CheckCircle2, XCircle, Clock, ExternalLink } from 'lucide-react';
+import { Search, ScanLine, ShieldCheck, ShieldAlert, CheckCircle2, XCircle, Clock, ExternalLink } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 // Import real verification utilities
