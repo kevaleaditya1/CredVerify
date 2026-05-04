@@ -1,11 +1,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { useWeb3 } from '../contexts/Web3Context';
 import { ShieldCheck, Zap, Globe, Lock, GraduationCap, UserCircle, Search, ArrowRight } from 'lucide-react';
-import { cn } from '../lib/utils';
 
 const Home: React.FC = () => {
-  const { isConnected } = useWeb3();
 
   const features = [
     {

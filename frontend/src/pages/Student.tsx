@@ -5,23 +5,15 @@ import { config } from '../config';
 import QRCode from 'qrcode.react';
 import { 
   UserCircle, 
-  Wallet, 
-  Award, 
-  Trash2, 
   Share2, 
   Eye, 
   ShieldCheck, 
-  Clock, 
-  Download, 
   FileText,
-  Shapes,
   ExternalLink,
-  ChevronRight,
   Database,
   X,
   AlertCircle
 } from 'lucide-react';
-import { cn } from '../lib/utils';
 
 // Import real IPFS and verification utilities
 import {

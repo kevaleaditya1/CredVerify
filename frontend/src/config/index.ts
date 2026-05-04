@@ -1,12 +1,4 @@
 // Environment configuration
-const parseRpcUrls = (value: string | undefined, fallback: string[]) => {
-  const urls = value
-    ?.split(',')
-    .map((url) => url.trim())
-    .filter(Boolean);
-
-  return urls && urls.length > 0 ? urls : fallback;
-};
 
 export const config = {
   contractAddress: process.env.REACT_APP_CONTRACT_ADDRESS || '',
