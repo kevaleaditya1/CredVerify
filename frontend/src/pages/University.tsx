@@ -45,6 +45,58 @@ interface IssuedCredential {
   fileType?: string;
 }
 
+interface DocumentTypeConfig {
+  label: string;
+  fields: Array<{
+    name: string;
+    label: string;
+    placeholder: string;
+  }>;
+}
+
+const DOCUMENT_TYPES: Record<string, DocumentTypeConfig> = {
+  degree: {
+    label: 'Degree Certificate',
+    fields: [
+      { name: 'rollNumber', label: 'Roll Number', placeholder: 'e.g., BIT001' },
+      { name: 'major', label: 'Major/Specialization', placeholder: 'e.g., Computer Science' },
+      { name: 'gpa', label: 'GPA/Grade', placeholder: 'e.g., 3.8 or A+' },
+    ],
+  },
+  transcript: {
+    label: 'Transcripts/Mark Sheets',
+    fields: [
+      { name: 'rollNumber', label: 'Roll Number', placeholder: 'e.g., BIT001' },
+      { name: 'semester', label: 'Semester', placeholder: 'e.g., 4th Semester' },
+      { name: 'gpa', label: 'GPA/CGPA', placeholder: 'e.g., 3.8' },
+    ],
+  },
+  provisional: {
+    label: 'Provisional Degree',
+    fields: [
+      { name: 'rollNumber', label: 'Roll Number', placeholder: 'e.g., BIT001' },
+      { name: 'yearOfStudy', label: 'Year of Study', placeholder: 'e.g., Final Year' },
+      { name: 'status', label: 'Status', placeholder: 'e.g., Pending/Approved' },
+    ],
+  },
+  bonafide: {
+    label: 'Bonafide Certificate',
+    fields: [
+      { name: 'rollNumber', label: 'Roll Number', placeholder: 'e.g., BIT001' },
+      { name: 'year', label: 'Academic Year', placeholder: 'e.g., 2024-2025' },
+      { name: 'department', label: 'Department', placeholder: 'e.g., Computer Science' },
+    ],
+  },
+  migration: {
+    label: 'Migration Certificate',
+    fields: [
+      { name: 'rollNumber', label: 'Roll Number', placeholder: 'e.g., BIT001' },
+      { name: 'year', label: 'Year of Graduation', placeholder: 'e.g., 2024' },
+      { name: 'destination', label: 'Destination University', placeholder: 'e.g., Stanford University' },
+    ],
+  },
+};
+
 const University: React.FC = () => {
   const { account, contract, isConnected, isOwner } = useWeb3();
   const [isAuthorizedIssuer, setIsAuthorizedIssuer] = useState(false);
@@ -59,9 +111,7 @@ const University: React.FC = () => {
     studentAddress: '',
     studentName: '',
     credentialType: 'degree',
-    major: '',
-    grade: '',
-    expiryDate: '',
+    fields: {} as Record<string, string>,
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [viewingDocument, setViewingDocument] = useState<string | null>(null);
@@ -185,12 +235,34 @@ const University: React.FC = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    
+    if (name === 'credentialType') {
+      // Reset fields when document type changes
+      setFormData(prev => ({
+        ...prev,
+        credentialType: value,
+        fields: {}
+      }));
+    } else if (['studentAddress', 'studentName'].includes(name)) {
+      // Handle standard fields
+      setFormData(prev => ({ ...prev, [name]: value }));
+    } else {
+      // Handle dynamic document type fields
+      setFormData(prev => ({
+        ...prev,
+        fields: { ...prev.fields, [name]: value }
+      }));
+    }
   };
 
   const issue = async () => {
     if (!contract || !account || !selectedFile) {
       toast.error('Missing required fields');
+      return;
+    }
+
+    if (!formData.studentAddress || !formData.studentName || Object.keys(formData.fields).length === 0) {
+      toast.error('Please fill in all required fields');
       return;
     }
 
@@ -208,9 +280,7 @@ const University: React.FC = () => {
         formData.studentAddress,
         account,
         {
-          major: formData.major,
-          grade: formData.grade,
-          expiryDate: formData.expiryDate || undefined,
+          ...formData.fields,
           country: issuerInfo?.country || 'Node',
         }
       );
@@ -220,15 +290,12 @@ const University: React.FC = () => {
       toast.success('IPFS Synchronization Complete', { id: 'ipfs' });
       
       toast.loading('Broadcasting to Ledger...', { id: 'eth' });
-      const expiryTimestamp = formData.expiryDate 
-        ? Math.floor(new Date(formData.expiryDate).getTime() / 1000)
-        : 0;
       
       const tx = await contract.issueCredential(
         formData.studentAddress,
         metadataCID,
         formData.credentialType,
-        expiryTimestamp
+        0
       );
       
       await tx.wait();
@@ -238,9 +305,7 @@ const University: React.FC = () => {
         studentAddress: '',
         studentName: '',
         credentialType: 'degree',
-        major: '',
-        grade: '',
-        expiryDate: '',
+        fields: {},
       });
       setSelectedFile(null);
       loadIssuedCredentials();
@@ -386,21 +451,29 @@ const University: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground pl-1">Category</label>
-                  <select name="credentialType" value={formData.credentialType} onChange={handleInputChange} className="matte-input bg-zinc-900 border-zinc-800">
-                    <option value="degree">Degree</option>
-                    <option value="diploma">Diploma</option>
-                    <option value="transcript">Transcript</option>
-                    <option value="certificate">Professional</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground pl-1">Result</label>
-                  <input type="text" name="grade" value={formData.grade} onChange={handleInputChange} className="matte-input" placeholder="GPA / Grade" />
-                </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground pl-1">Document Type</label>
+                <select name="credentialType" value={formData.credentialType} onChange={handleInputChange} className="matte-input bg-zinc-900 border-zinc-800 w-full">
+                  {Object.entries(DOCUMENT_TYPES).map(([key, config]) => (
+                    <option key={key} value={key}>{config.label}</option>
+                  ))}
+                </select>
               </div>
+
+              {/* Dynamic fields based on document type */}
+              {DOCUMENT_TYPES[formData.credentialType]?.fields.map((fieldConfig) => (
+                <div key={fieldConfig.name} className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground pl-1">{fieldConfig.label}</label>
+                  <input
+                    type="text"
+                    name={fieldConfig.name}
+                    value={formData.fields[fieldConfig.name] || ''}
+                    onChange={handleInputChange}
+                    className="matte-input"
+                    placeholder={fieldConfig.placeholder}
+                  />
+                </div>
+              ))}
 
               <div 
                 {...getRootProps()} 
