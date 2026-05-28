@@ -50,7 +50,9 @@ interface DocumentTypeConfig {
   fields: Array<{
     name: string;
     label: string;
-    placeholder: string;
+    placeholder?: string;
+    type?: 'text' | 'select';
+    options?: Array<{ value: string; label: string }>;
   }>;
 }
 
@@ -74,9 +76,28 @@ const DOCUMENT_TYPES: Record<string, DocumentTypeConfig> = {
   provisional: {
     label: 'Provisional Degree',
     fields: [
-      { name: 'rollNumber', label: 'Roll Number', placeholder: 'e.g., BIT001' },
-      { name: 'yearOfStudy', label: 'Year of Study', placeholder: 'e.g., Final Year' },
-      { name: 'status', label: 'Status', placeholder: 'e.g., Pending/Approved' },
+      { name: 'rollNumber', label: 'Roll Number', placeholder: 'e.g., BIT001', type: 'text' },
+      { 
+        name: 'yearOfStudy', 
+        label: 'Year of Study', 
+        type: 'select',
+        options: [
+          { value: 'First Year', label: 'First Year' },
+          { value: 'Second Year', label: 'Second Year' },
+          { value: 'Third Year', label: 'Third Year' },
+          { value: 'Fourth Year', label: 'Fourth Year' },
+          { value: 'Final Year', label: 'Final Year' },
+        ],
+      },
+      { 
+        name: 'status', 
+        label: 'Status', 
+        type: 'select',
+        options: [
+          { value: 'Pending', label: 'Pending' },
+          { value: 'Approved', label: 'Approved' },
+        ],
+      },
     ],
   },
   bonafide: {
@@ -464,14 +485,28 @@ const University: React.FC = () => {
               {DOCUMENT_TYPES[formData.credentialType]?.fields.map((fieldConfig) => (
                 <div key={fieldConfig.name} className="space-y-2">
                   <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground pl-1">{fieldConfig.label}</label>
-                  <input
-                    type="text"
-                    name={fieldConfig.name}
-                    value={formData.fields[fieldConfig.name] || ''}
-                    onChange={handleInputChange}
-                    className="matte-input"
-                    placeholder={fieldConfig.placeholder}
-                  />
+                  {fieldConfig.type === 'select' ? (
+                    <select
+                      name={fieldConfig.name}
+                      value={formData.fields[fieldConfig.name] || ''}
+                      onChange={handleInputChange}
+                      className="matte-input bg-zinc-900 border-zinc-800 w-full"
+                    >
+                      <option value="">Select {fieldConfig.label}</option>
+                      {fieldConfig.options?.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      name={fieldConfig.name}
+                      value={formData.fields[fieldConfig.name] || ''}
+                      onChange={handleInputChange}
+                      className="matte-input"
+                      placeholder={fieldConfig.placeholder}
+                    />
+                  )}
                 </div>
               ))}
 
