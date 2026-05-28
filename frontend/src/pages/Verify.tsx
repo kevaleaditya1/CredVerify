@@ -142,7 +142,7 @@ const Verify: React.FC = () => {
   return (
     <div className="space-y-16 pb-32">
       <header className="text-center space-y-4 max-w-2xl mx-auto">
-        <h1 className="text-5xl font-bold tracking-tighter">Audit Terminal</h1>
+        <h1 className="text-5xl font-bold tracking-tighter">Verify Terminal</h1>
         <p className="text-muted-foreground text-lg italic tracking-tight">Authenticate any academic record instantly using the Ethereum decentralized ledger.</p>
       </header>
 

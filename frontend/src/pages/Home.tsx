@@ -69,7 +69,7 @@ const Home: React.FC = () => {
               Audit a Record
             </Link>
             <Link to="/university" className="matte-button-secondary h-14 px-10 text-lg rounded-full bg-zinc-900 border-zinc-800 hover:bg-zinc-800">
-              Registrar Portal
+              University Portal
             </Link>
           </div>
         </div>
@@ -78,9 +78,9 @@ const Home: React.FC = () => {
           <div className="aspect-square rounded-3xl bg-zinc-950 border border-zinc-800 flex items-center justify-center relative overflow-hidden group">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.05),transparent)] opacity-0 group-hover:opacity-100 transition-opacity" />
               <img 
-                src="/logo.png" 
+                src="/logo.svg" 
                 alt="DACV Logo" 
-                className="w-full h-full object-contain p-8 group-hover:scale-105 transition-transform duration-500" 
+                className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500" 
               />
            </div>
         </div>
